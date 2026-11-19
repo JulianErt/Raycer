@@ -1,0 +1,11 @@
+name = "time-trial"
+version = 0
+laps = 3
+max_episode_steps = 9000
+
+[track]
+type = "builtin"
+builtin = "oval"
+
+[reward]
+time = 0.05

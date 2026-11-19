@@ -1,0 +1,8 @@
+name = "oval"
+version = 0
+laps = 1
+max_episode_steps = 3000
+
+[track]
+type = "builtin"
+builtin = "oval"
