@@ -29,7 +29,9 @@ Always call tools with explicit paths (`src tests examples`), never on `.`.
 ## Conventions
 
 - Package layout: `src/raycer/`, scenarios as package data
-  in `src/raycer/scenarios/*.toml`, golden files in `tests/golden/*.npz`.
+  in `src/raycer/scenarios/*.toml`, golden files in `tests/golden/*.npz`; regenerate them with
+  `uv run pytest tests/test_golden.py --update-golden` and justify every golden change in the
+  PR (QA-35).
 - Headless: tests run with `SDL_VIDEODRIVER=dummy`. Never open windows.
 - No `print` in `src/` except CLI output; use `logging`.
 - Public functions have type hints and a one-line docstring. mypy strict on `src/raycer`.
