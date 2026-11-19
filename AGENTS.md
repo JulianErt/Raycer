@@ -21,7 +21,7 @@ uv run ruff format --check src tests examples
 uv run mypy
 uv run pytest -m "not slow and not human" -q --cov=raycer --cov-fail-under=85
 uv run raycer benchmark --scenario technical-v0 --steps 2000 \
-  --buffers screen,depth,labels --seed 0 --min-sps "${RAYCER_MIN_SPS:-250}"
+  --buffers screen,depth,labels --seed 0 --min-sps "${RAYCER_MIN_SPS:-400}"
 ```
 
 Always call tools with explicit paths (`src tests examples`), never on `.`.

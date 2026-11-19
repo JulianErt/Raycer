@@ -55,6 +55,10 @@ class ProgressTracker:
         self._d = np.roll(track.center, -1, axis=0) - track.center
         self._seg_len = np.linalg.norm(self._d, axis=1)
         self._s0 = np.concatenate([[0.0], np.cumsum(self._seg_len[:-1])])
+        self._seg_len2 = self._seg_len**2
+        self._everything = np.arange(len(self._a))
+        # A segment starting up to one step before the window still reaches into it.
+        self._window = SEARCH_WINDOW + self._seg_len.max()
         self._timeout_ticks = round(checkpoint_timeout_s / dt)
         self._stuck_ticks = round(stuck_window_s / dt)
         self._stuck_min = stuck_min_progress
@@ -69,8 +73,9 @@ class ProgressTracker:
         """Project (x, y) onto the segments idx; return s, segment, t and distance."""
         p = np.array([x, y])
         a, d = self._a[idx], self._d[idx]
-        t = np.clip(np.einsum("nk,nk->n", p - a, d) / (self._seg_len[idx] ** 2), 0.0, 1.0)
-        dist = np.linalg.norm(a + t[:, None] * d - p, axis=1)
+        t = np.minimum(np.maximum(np.einsum("nk,nk->n", p - a, d) / self._seg_len2[idx], 0.0), 1.0)
+        off = a + t[:, None] * d - p
+        dist = np.sqrt(np.add.reduce(off * off, axis=1))
         j = int(np.argmin(dist))
         i, tj = int(idx[j]), float(t[j])
         s = (self._s0[i] + tj * self._seg_len[i]) % self.track.length
@@ -78,17 +83,15 @@ class ProgressTracker:
 
     def _locate(self, x: float, y: float, s_old: float | None) -> tuple[float, int, float]:
         """Find s, segment and t; local window around s_old with global fallback."""
-        everything = np.arange(len(self._a))
         if s_old is not None:
             length = self.track.length
             gap = np.abs((self._s0 - s_old + length / 2) % length - length / 2)
-            # A segment starting up to one step before the window still reaches into it.
-            local = everything[gap <= SEARCH_WINDOW + self._seg_len.max()]
+            local = np.flatnonzero(gap <= self._window)
             s, i, t, dist = self._project(x, y, local)
             w = (1 - t) * self.track.width[i] + t * self.track.width[(i + 1) % len(self._a)]
             if dist <= w / 2 + SEARCH_MARGIN:
                 return s, i, t
-        s, i, t, _ = self._project(x, y, everything)
+        s, i, t, _ = self._project(x, y, self._everything)
         return s, i, t
 
     def _state_at(
@@ -97,7 +100,7 @@ class ProgressTracker:
         """Return lateral offset, heading error and tangent angle at the projection."""
         j = (i + 1) % len(self._a)
         n = (1 - t) * self.track.normal[i] + t * self.track.normal[j]
-        n /= np.linalg.norm(n)
+        n /= math.sqrt(n.dot(n))
         c = self._a[i] + t * self._d[i]
         lateral = float(np.dot(np.array([x, y]) - c, n))
         tangent = math.atan2(-float(n[0]), float(n[1]))

@@ -131,6 +131,8 @@ class Renderer:
 
     def render(self, track: Track, car_state: CarState) -> RenderOutput:
         """Render the enabled buffers: sky, checkered floor and striped, shaded walls."""
+        if not (self.rgb_enabled or self.depth_enabled or self.labels_enabled):
+            return RenderOutput(None, None, None)
         rays, depth, seg, s, cos = self._cast(track, car_state)
         half = self.height // 2
         mvd = self.max_view_distance
@@ -143,8 +145,9 @@ class Renderer:
             py = car_state.y + fd * rays[:, 1]
             q = track.finish_quad
             edge = q[[1, 2, 3, 0]] - q
-            side = [edge[n, 0] * (py - q[n, 1]) - edge[n, 1] * (px - q[n, 0]) for n in range(4)]
-            inside = np.all(np.array(side) >= 0, axis=0) | np.all(np.array(side) <= 0, axis=0)
+            e4, q4 = edge[:, :, None, None], q[:, :, None, None]
+            side = e4[:, 0] * (py - q4[:, 1]) - e4[:, 1] * (px - q4[:, 0])
+            inside = np.all(side >= 0, axis=0) | np.all(side <= 0, axis=0)
         if self.depth_enabled or self.labels_enabled:
             far = np.float32(mvd)
             dbuf = np.full((self.height, self.width), far, dtype=np.float32)

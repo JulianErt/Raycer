@@ -1,16 +1,24 @@
 """Kinematic bicycle car physics (PHYS-01..07) with circle-vs-segment wall collision."""
 
 import math
+import weakref
 from dataclasses import dataclass
 from typing import NamedTuple
 
 import numpy as np
+from numpy.typing import NDArray
 
-from raycer.track import Track
+from raycer.track import CELL_SIZE, Track
+
+Array = NDArray[np.float64]
 
 DT: float = 1 / 60
 _COLLISION_ITERATIONS = 3
 _PUSH_EPS = 1e-4
+# Per track and grid cell: nearby segment starts, directions and squared lengths.
+_NEAR: weakref.WeakKeyDictionary[Track, dict[tuple[int, int], tuple[Array, Array, Array]]] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 @dataclass(frozen=True)
@@ -56,31 +64,36 @@ def _sign(value: float) -> float:
 
 def _resolve(x: float, y: float, track: Track, r_car: float) -> tuple[float, float, bool]:
     """Push the centre out of all segments closer than r_car; return x, y and whether it moved."""
-    idx = track.segments_near((x, y))
-    a, b = track.seg_a[idx], track.seg_b[idx]
-    d = b - a
-    dd = np.einsum("nk,nk->n", d, d)
+    cells = _NEAR.setdefault(track, {})
+    key = (math.floor(x / CELL_SIZE), math.floor(y / CELL_SIZE))
+    if key not in cells:
+        idx = track.segments_near((x, y))
+        a, b = track.seg_a[idx], track.seg_b[idx]
+        d = b - a
+        cells[key] = (a, d, np.einsum("nk,nk->n", d, d))
+    a, d, dd = cells[key]
+    ax, ay, dx, dy = a[:, 0], a[:, 1], d[:, 0], d[:, 1]
     pushed = False
     for _ in range(_COLLISION_ITERATIONS):
-        t = np.clip(((x - a[:, 0]) * d[:, 0] + (y - a[:, 1]) * d[:, 1]) / dd, 0.0, 1.0)
-        dist = np.hypot(x - (a[:, 0] + t * d[:, 0]), y - (a[:, 1] + t * d[:, 1]))
+        t = np.minimum(np.maximum(((x - ax) * dx + (y - ay) * dy) / dd, 0.0), 1.0)
+        dist = np.hypot(x - (ax + t * dx), y - (ay + t * dy))
         hits = np.flatnonzero(dist < r_car)
         if len(hits) == 0:
             break
         pushed = True
         # Sequential pushes, each against the current position, so corners resolve correctly.
         for i in hits.tolist():
-            ax, ay, dx, dy = float(a[i, 0]), float(a[i, 1]), float(d[i, 0]), float(d[i, 1])
-            ti = _clip(((x - ax) * dx + (y - ay) * dy) / float(dd[i]), 0.0, 1.0)
-            cx, cy = ax + ti * dx, ay + ti * dy
+            sx, sy, ex, ey = float(ax[i]), float(ay[i]), float(dx[i]), float(dy[i])
+            ti = _clip(((x - sx) * ex + (y - sy) * ey) / float(dd[i]), 0.0, 1.0)
+            cx, cy = sx + ti * ex, sy + ti * ey
             ox, oy = x - cx, y - cy
             norm = math.hypot(ox, oy)
             if norm >= r_car:
                 continue
             if norm == 0.0:
                 # Centre exactly on the segment: push along the segment's left normal.
-                seg_len = math.hypot(dx, dy)
-                ox, oy, norm = -dy / seg_len, dx / seg_len, 1.0
+                seg_len = math.hypot(ex, ey)
+                ox, oy, norm = -ey / seg_len, ex / seg_len, 1.0
             x = cx + ox / norm * (r_car + _PUSH_EPS)
             y = cy + oy / norm * (r_car + _PUSH_EPS)
     return x, y, pushed
