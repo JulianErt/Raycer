@@ -1,0 +1,59 @@
+[project]
+name = "raycer"
+version = "0.1.0"
+description = "A raycasting racing environment for machine learning research"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "JulianErt" }]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0",
+    "gymnasium>=1.0,<2",
+]
+
+[project.optional-dependencies]
+human = ["pygame>=2.6"]
+
+[project.scripts]
+raycer = "raycer.cli:main"
+
+[dependency-groups]
+dev = ["ruff", "mypy", "pytest", "pytest-cov", "pytest-timeout"]
+train = ["stable-baselines3>=2.4", "torch>=2.4"]
+
+[build-system]
+requires = ["uv_build>=0.9.6,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY", "PT", "RUF", "N"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/raycer"]
+
+[[tool.mypy.overrides]]
+module = ["pygame.*", "stable_baselines3.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --timeout=60"
+markers = [
+  "slow: long-running (PPO, full perf); excluded from gate",
+  "human: needs a real display/user; never run headless",
+]
+
+[tool.coverage.run]
+source = ["raycer"]
+omit = ["*/raycer/human.py", "*/raycer/__main__.py"]
