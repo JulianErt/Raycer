@@ -268,8 +268,8 @@ def test_render_API15() -> None:
     env = _env()
     env.reset(seed=0)
     assert env.render() is None
-    with pytest.raises(NotImplementedError, match="human"):
-        _env(render_mode="human")
+    with pytest.raises(ValueError, match="render_mode"):
+        _env(render_mode="bogus")
 
 
 def test_no_pygame_API15() -> None:
@@ -277,7 +277,22 @@ def test_no_pygame_API15() -> None:
         "import sys, gymnasium, raycer\n"
         "env = gymnasium.make('Raycer/Oval-v0', render_mode='rgb_array')\n"
         "env.reset(seed=0); env.step(1); env.render()\n"
+        "import raycer.cli\n"
+        "assert raycer.cli.main(['list']) == 0\n"
         "assert 'pygame' not in sys.modules\n"
+    )
+    subprocess.run([sys.executable, "-c", code], check=True, capture_output=True)
+
+
+def test_pygame_unimportable_API15() -> None:
+    """REND-11: raycer works without pygame for the rgb_array mode."""
+    code = (
+        "import sys\n"
+        "sys.modules['pygame'] = None\n"
+        "import raycer\n"
+        "env = raycer.RaycerEnv(render_mode='rgb_array')\n"
+        "env.reset(seed=0); env.step(1)\n"
+        "assert env.render() is not None\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
 

@@ -1,6 +1,6 @@
 """Gymnasium environment over one Game (API-03, 04, 06, 10, 14, 15, 16)."""
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import gymnasium as gym
 import numpy as np
@@ -11,6 +11,9 @@ from raycer.config import load_config
 from raycer.game import Game, GameState
 from raycer.palette import LABEL_COLORS
 from raycer.track import PRESETS, SPLITS, generate_track, load_builtin
+
+if TYPE_CHECKING:
+    from raycer.human import Viewer
 
 Obs = dict[str, Any]
 
@@ -38,9 +41,7 @@ class RaycerEnv(gym.Env[Obs, Any]):
         metric_depth_info: bool = False,
     ) -> None:
         """Merge the config, configure and init the Game and build the spaces."""
-        if render_mode == "human":
-            raise NotImplementedError("render_mode='human': the human viewer is not available yet")
-        if render_mode not in (None, "rgb_array"):
+        if render_mode not in (None, "rgb_array", "human"):
             raise ValueError(f"unknown render_mode {render_mode!r}")
         if action_type not in ("discrete", "continuous"):
             raise ValueError(f"action_type must be 'discrete' or 'continuous', got {action_type!r}")
@@ -80,6 +81,11 @@ class RaycerEnv(gym.Env[Obs, Any]):
         self.game.init()
         if self._track_cfg["type"] == "builtin":
             self.game._set_track(load_builtin(self._track_cfg["builtin"]), self._laps)
+        self.viewer: Viewer | None = None
+        if render_mode == "human":
+            import raycer.human
+
+            self.viewer = raycer.human.Viewer(w, h, self.game._renderer.max_view_distance)
 
         obs_spaces: dict[str, spaces.Space[Any]] = {}
         if buffers["screen"]:
@@ -149,7 +155,14 @@ class RaycerEnv(gym.Env[Obs, Any]):
 
     def render(self) -> NDArray[np.uint8] | None:
         """Return the active buffers side by side at double size, or None without rgb_array."""
-        if self.render_mode is None:
+        if self.viewer is not None:
+            gv = self.game._snapshot().game_variables
+            hud = (
+                f"speed {gv[0]:.1f} m/s  lap {int(gv[2])}  progress {gv[1]:.2f}"
+                f"  reward {self.game.get_total_reward():.2f}"
+            )
+            self.viewer.show(self.game._output, hud)
+        if self.render_mode != "rgb_array":
             return None
         obs = self._obs(self.game._snapshot())
         parts = []
@@ -161,6 +174,11 @@ class RaycerEnv(gym.Env[Obs, Any]):
             parts.append(LABEL_COLORS[obs["labels"][..., 0]])
         image = np.concatenate(parts, axis=1) if parts else np.zeros((self._height, 0, 3), np.uint8)
         return np.repeat(np.repeat(image, 2, axis=0), 2, axis=1)
+
+    def close(self) -> None:
+        """Close the viewer window if there is one."""
+        if self.viewer is not None:
+            self.viewer.close()
 
     def _obs(self, state: GameState) -> Obs:
         """Build the Dict observation from a state snapshot."""

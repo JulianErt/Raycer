@@ -90,6 +90,10 @@ def test_list(capsys: pytest.CaptureFixture[str]) -> None:
         ["benchmark", "--scenario", "proc-train-v0"],
         ["benchmark", "--bogus"],
         ["render-sample", "--width", "33"],
+        ["play", "--replay", "missing.npz"],
+        ["play", "--replay", __file__, "--record", "out"],
+        ["play", "--scenario", "nope-v0"],
+        ["play", "--width", "33"],
         ["bogus"],
     ],
 )
@@ -99,7 +103,7 @@ def test_usage_errors_exit_2(argv: list[str]) -> None:
     assert exc.value.code == 2
 
 
-@pytest.mark.parametrize("cmd", ["benchmark", "render-sample", "list"])
+@pytest.mark.parametrize("cmd", ["benchmark", "render-sample", "list", "play"])
 def test_help_exits_0(cmd: str) -> None:
     with pytest.raises(SystemExit) as exc:
         main([cmd, "--help"])

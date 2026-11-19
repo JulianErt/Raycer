@@ -16,8 +16,10 @@ import raycer
 from raycer import physics
 from raycer._png import write_png
 from raycer.config import list_scenarios, load_config
+from raycer.env import RaycerEnv
 from raycer.game import DISCRETE_ACTIONS, Game
 from raycer.palette import LABEL_COLORS
+from raycer.recording import RecordEpisode
 from raycer.render import Renderer
 from raycer.track import load_builtin
 
@@ -68,6 +70,17 @@ def build_parser() -> argparse.ArgumentParser:
     sample.add_argument("--out", default="samples")
 
     sub.add_parser("list", help="list scenarios and their Gym IDs")
+
+    play = sub.add_parser("play", help="drive with the keyboard or replay a recording")
+    play.add_argument("--scenario", default="oval-v0")
+    play.add_argument("--seed", type=int, default=0)
+    play.add_argument("--width", type=int, default=320)
+    play.add_argument("--height", type=int, default=240)
+    play.add_argument("--depth", action="store_true", help="enable the depth buffer")
+    play.add_argument("--labels", action="store_true", help="enable the labels buffer")
+    play.add_argument("--record", metavar="DIR", help="record episodes to this directory")
+    play.add_argument("--replay", metavar="FILE", help="replay a recorded .npz episode")
+    play.add_argument("--continuous", action="store_true", help="use the continuous action space")
     return parser
 
 
@@ -193,6 +206,41 @@ def _list() -> int:
     return 0
 
 
+def _play(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
+    """Play with the keyboard, optionally recording, or replay a recorded episode."""
+    if args.replay is not None and args.record is not None:
+        parser.error("--replay and --record cannot be combined")
+    if args.replay is not None and not Path(args.replay).is_file():
+        parser.error(f"replay file not found: {args.replay}")
+    try:
+        from raycer.human import play, replay
+    except ImportError as e:
+        print(f"raycer play: {e}", file=sys.stderr)
+        return 1
+    if args.replay is not None:
+        replay(args.replay)
+        return 0
+    try:
+        env: Any = RaycerEnv(
+            args.scenario,
+            render_mode="human",
+            width=args.width,
+            height=args.height,
+            depth=args.depth,
+            labels=args.labels,
+            action_type="continuous" if args.continuous else "discrete",
+        )
+    except ValueError as e:
+        parser.error(str(e))
+    if args.record is not None:
+        env = RecordEpisode(env, args.record)
+    try:
+        play(env, args.seed)
+    finally:
+        env.close()
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the CLI and return the exit code."""
     parser = build_parser()
@@ -203,5 +251,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _render_sample(parser, args)
     if args.command == "list":
         return _list()
+    if args.command == "play":
+        return _play(parser, args)
     parser.print_help()
     return 0
