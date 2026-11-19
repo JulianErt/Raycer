@@ -191,6 +191,12 @@ class Game:
         self._initialized = True
         self.new_episode()
 
+    def _set_track(self, track: Track, laps: int) -> None:
+        """Replace track, tracker and lap target after init(); call new_episode next."""
+        self._track = track
+        self._tracker = ProgressTracker(track, dt=DT)
+        self._laps = laps
+
     def new_episode(self, seed: int | None = None) -> None:
         """Reset car, progress, counters and reward and render the start state."""
         if not self._initialized:
@@ -251,6 +257,10 @@ class Game:
         """Return a copy of the current state, or None if no episode is running."""
         if not self._initialized or self.is_episode_finished():
             return None
+        return self._snapshot()
+
+    def _snapshot(self) -> GameState:
+        """Return a copy of the current state, also after the episode finished."""
         p = self._progress
         variables = np.array(
             [
