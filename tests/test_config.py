@@ -144,6 +144,7 @@ def test_wheel_contains_scenarios(tmp_path: Path) -> None:
         capture_output=True,
     )
     (wheel,) = tmp_path.glob("*.whl")
+    assert wheel.name == f"raycer-{raycer.__version__}-py3-none-any.whl"  # PKG-04
     entries = set(zipfile.ZipFile(wheel).namelist())
     for name in NAMES:
         assert f"raycer/scenarios/{name}.toml" in entries
