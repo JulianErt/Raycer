@@ -80,7 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
     play.add_argument("--labels", action="store_true", help="enable the labels buffer")
     play.add_argument("--record", metavar="DIR", help="record episodes to this directory")
     play.add_argument("--replay", metavar="FILE", help="replay a recorded .npz episode")
-    play.add_argument("--continuous", action="store_true", help="use the continuous action space")
+    actions = play.add_mutually_exclusive_group()
+    actions.add_argument("--discrete", action="store_true", help="use the discrete action space")
+    actions.add_argument(
+        "--continuous", action="store_true", help="use the continuous action space (default)"
+    )
     return parser
 
 
@@ -228,7 +232,7 @@ def _play(parser: argparse.ArgumentParser, args: argparse.Namespace) -> int:
             height=args.height,
             depth=args.depth,
             labels=args.labels,
-            action_type="continuous" if args.continuous else "discrete",
+            action_type="discrete" if args.discrete else "continuous",
         )
     except ValueError as e:
         parser.error(str(e))

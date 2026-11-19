@@ -197,6 +197,10 @@ class Game:
         self._tracker = ProgressTracker(track, dt=DT)
         self._laps = laps
 
+    def get_track(self) -> Track:
+        """Return the current track."""
+        return self._track
+
     def new_episode(self, seed: int | None = None) -> None:
         """Reset car, progress, counters and reward and render the start state."""
         if not self._initialized:

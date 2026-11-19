@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from gymnasium import spaces
 
 from raycer.cli import main
 from test_png import decode_png, read_chunks
@@ -94,6 +95,7 @@ def test_list(capsys: pytest.CaptureFixture[str]) -> None:
         ["play", "--replay", __file__, "--record", "out"],
         ["play", "--scenario", "nope-v0"],
         ["play", "--width", "33"],
+        ["play", "--discrete", "--continuous"],
         ["bogus"],
     ],
 )
@@ -108,3 +110,27 @@ def test_help_exits_0(cmd: str) -> None:
     with pytest.raises(SystemExit) as exc:
         main([cmd, "--help"])
     assert exc.value.code == 0
+
+
+@pytest.mark.parametrize(
+    ("flags", "space"),
+    [([], spaces.Box), (["--continuous"], spaces.Box), (["--discrete"], spaces.Discrete)],
+)
+def test_play_action_space_HUM05(
+    flags: list[str], space: type, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    import raycer.human
+
+    envs = []
+    monkeypatch.setattr(raycer.human, "play", lambda env, seed: envs.append(env))
+    assert main(["play", "--width", "32", "--height", "24", *flags]) == 0
+    assert isinstance(envs[0].action_space, space)
+
+
+def test_play_help_lists_action_flags_HUM05(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        main(["play", "--help"])
+    out = capsys.readouterr().out
+    assert "--discrete" in out
+    assert "--continuous" in out

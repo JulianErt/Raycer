@@ -26,6 +26,7 @@ SIGNATURES: dict[str, list[tuple[str, inspect._ParameterKind, object]]] = {
     "new_episode": [("seed", _POS, None)],
     "make_action": [("action", _POS, P.empty)],
     "get_state": [],
+    "get_track": [],
     "is_episode_finished": [],
     "is_episode_timeout_reached": [],
     "get_episode_time": [],
