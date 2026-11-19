@@ -1,4 +1,4 @@
-"""Column raycaster (REND-01..03, 07..09): renders the RGB buffer of a track from a car pose."""
+"""Column raycaster (REND-01..09): renders RGB, depth and labels buffers from a car pose."""
 
 import math
 from dataclasses import dataclass
@@ -24,13 +24,24 @@ for _m, _a, _b, _w in (
 ):
     _STRIPE_A[_m], _STRIPE_B[_m], _STRIPE_W[_m] = _a, _b, _w
 _FOG = np.array(palette.FOG, dtype=np.float64)
+# Label IDs of the labels buffer (REND-05); wall IDs equal track.Material.
+LABELS: dict[int, str] = {
+    0: "SKY",
+    1: "ROAD",
+    2: "LEFT_BARRIER",
+    3: "RIGHT_BARRIER",
+    4: "FINISH",
+    5: "OBSTACLE",
+}
 
 
 @dataclass(frozen=True)
 class RenderOutput:
-    """Rendered buffers; rgb is (H, W, 3) uint8."""
+    """Rendered buffers: rgb (H, W, 3) uint8, depth (H, W) float32, labels (H, W) uint8."""
 
     rgb: NDArray[np.uint8] | None
+    depth: NDArray[np.float32] | None
+    labels: NDArray[np.uint8] | None
 
 
 def _checker(px: Array, py: Array, cell: float, a: tuple[int, ...], b: tuple[int, ...]) -> Array:
@@ -54,18 +65,27 @@ class Renderer:
         height: int = 72,
         fov_deg: float = 90.0,
         max_view_distance: float = 60.0,
+        *,
+        rgb: bool = True,
+        depth: bool = False,
+        labels: bool = False,
     ) -> None:
-        """Validate the camera (REND-01) and precompute rays, rows and the sky gradient."""
+        """Validate the camera (REND-01/04) and precompute rays, rows and the sky gradient."""
         if width % 2 or not 32 <= width <= 640:
             raise ValueError(f"width must be even and in 32..640, got {width}")
         if height % 2 or not 24 <= height <= 480:
             raise ValueError(f"height must be even and in 24..480, got {height}")
         if not 60.0 <= fov_deg <= 120.0:
             raise ValueError(f"fov_deg must be in 60..120, got {fov_deg}")
+        if not 10.0 <= max_view_distance <= 200.0:
+            raise ValueError(f"max_view_distance must be in 10..200, got {max_view_distance}")
         self.width = width
         self.height = height
         self.fov_deg = fov_deg
         self.max_view_distance = max_view_distance
+        self.rgb_enabled = rgb
+        self.depth_enabled = depth
+        self.labels_enabled = labels
         self.focal = (width / 2) / math.tan(math.radians(fov_deg) / 2)
         half = height // 2
         self._k = (np.arange(width) + 0.5 - width / 2) / self.focal
@@ -110,32 +130,47 @@ class Renderer:
         return self._cast(track, car_state)[1]
 
     def render(self, track: Track, car_state: CarState) -> RenderOutput:
-        """Render the RGB buffer: sky gradient, checkered floor and striped, shaded walls."""
+        """Render the enabled buffers: sky, checkered floor and striped, shaded walls."""
         rays, depth, seg, s, cos = self._cast(track, car_state)
         half = self.height // 2
-        img = np.empty((self.height, self.width, 3))
-        img[:half] = self._sky[:, None, :]
+        mvd = self.max_view_distance
+        mask = (np.abs(self._dy)[:, None] <= self.focal * CAMERA_HEIGHT / depth) & (depth < mvd)
         fd = self._floor_depth[:, None]
-        px = car_state.x + fd * rays[:, 0]
-        py = car_state.y + fd * rays[:, 1]
-        q = track.finish_quad
-        edge = q[[1, 2, 3, 0]] - q
-        side = [edge[n, 0] * (py - q[n, 1]) - edge[n, 1] * (px - q[n, 0]) for n in range(4)]
-        inside = np.all(np.array(side) >= 0, axis=0) | np.all(np.array(side) <= 0, axis=0)
-        floor = np.where(
-            inside[..., None],
-            _checker(px, py, 0.5, palette.FINISH_A, palette.FINISH_B),
-            _checker(px, py, 4.0, palette.ROAD_A, palette.ROAD_B),
-        )
-        img[half:] = _fog(floor, np.broadcast_to(fd, px.shape), self.max_view_distance)
         mat = track.seg_material[seg]
-        u = track.seg_u0[seg] + s * np.linalg.norm(track.seg_b[seg] - track.seg_a[seg], axis=1)
-        odd = np.floor(u / _STRIPE_W[mat]) % 2 == 1
-        wall = np.where(odd[:, None], _STRIPE_B[mat], _STRIPE_A[mat]) * (0.6 + 0.4 * cos)[:, None]
-        wall = _fog(wall, depth, self.max_view_distance)
-        mask = (np.abs(self._dy)[:, None] <= self.focal * CAMERA_HEIGHT / depth) & (
-            depth < self.max_view_distance
-        )
-        img = np.where(mask[..., None], wall[None], img)
-        rgb = np.ascontiguousarray(np.clip(np.rint(img), 0, 255).astype(np.uint8))
-        return RenderOutput(rgb=rgb)
+        rgb = dbuf = lbuf = None
+        if self.rgb_enabled or self.labels_enabled:
+            px = car_state.x + fd * rays[:, 0]
+            py = car_state.y + fd * rays[:, 1]
+            q = track.finish_quad
+            edge = q[[1, 2, 3, 0]] - q
+            side = [edge[n, 0] * (py - q[n, 1]) - edge[n, 1] * (px - q[n, 0]) for n in range(4)]
+            inside = np.all(np.array(side) >= 0, axis=0) | np.all(np.array(side) <= 0, axis=0)
+        if self.depth_enabled or self.labels_enabled:
+            far = np.float32(mvd)
+            dbuf = np.full((self.height, self.width), far, dtype=np.float32)
+            dbuf[half:] = fd.astype(np.float32)
+            dbuf = np.where(mask, depth.astype(np.float32)[None], dbuf)
+            dbuf = np.ascontiguousarray(np.minimum(dbuf, far))
+        if self.labels_enabled:
+            lbuf = np.zeros((self.height, self.width), dtype=np.uint8)
+            lbuf[half:] = np.where(inside, 4, 1)
+            lbuf = np.where(mask, mat[None], lbuf).astype(np.uint8)
+            lbuf[dbuf == far] = 0
+        if self.rgb_enabled:
+            img = np.empty((self.height, self.width, 3))
+            img[:half] = self._sky[:, None, :]
+            floor = np.where(
+                inside[..., None],
+                _checker(px, py, 0.5, palette.FINISH_A, palette.FINISH_B),
+                _checker(px, py, 4.0, palette.ROAD_A, palette.ROAD_B),
+            )
+            img[half:] = _fog(floor, np.broadcast_to(fd, px.shape), mvd)
+            u = track.seg_u0[seg] + s * np.linalg.norm(track.seg_b[seg] - track.seg_a[seg], axis=1)
+            odd = np.floor(u / _STRIPE_W[mat]) % 2 == 1
+            wall = (
+                np.where(odd[:, None], _STRIPE_B[mat], _STRIPE_A[mat]) * (0.6 + 0.4 * cos)[:, None]
+            )
+            wall = _fog(wall, depth, mvd)
+            img = np.where(mask[..., None], wall[None], img)
+            rgb = np.ascontiguousarray(np.clip(np.rint(img), 0, 255).astype(np.uint8))
+        return RenderOutput(rgb=rgb, depth=dbuf if self.depth_enabled else None, labels=lbuf)

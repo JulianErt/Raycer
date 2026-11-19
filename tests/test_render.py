@@ -1,5 +1,6 @@
 import dataclasses
 import inspect
+import itertools
 import math
 import warnings
 
@@ -9,7 +10,7 @@ from numpy.typing import NDArray
 
 from raycer import palette, render
 from raycer.physics import CarState, start_state
-from raycer.render import Renderer, RenderOutput
+from raycer.render import LABELS, Renderer, RenderOutput
 from raycer.track import Material, Track, load_builtin
 
 Array = NDArray[np.float64]
@@ -200,6 +201,159 @@ def test_culling_is_bit_identical(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(track, "segments_in_radius", lambda *a, **k: np.arange(len(track.seg_a)))
     for p, rgb in zip(poses, culled, strict=True):
         assert np.array_equal(_rgb(track, state=p), rgb)
+
+
+def _poses(n_per_track: int, seed: int = 7) -> list[tuple[Track, CarState]]:
+    """Fixed-seed random poses inside the corridor of every builtin track."""
+    rng = np.random.default_rng(seed)
+    poses = []
+    for name in ("oval", "kidney", "technical"):
+        track = load_builtin(name)
+        for _ in range(n_per_track):
+            n = int(rng.integers(len(track.center)))
+            lim = track.width[n] / 2 - 0.5
+            x, y = track.center[n] + rng.uniform(-lim, lim) * track.normal[n]
+            poses.append(
+                (track, CarState(float(x), float(y), float(rng.uniform(-np.pi, np.pi)), 0.0))
+            )
+    return poses
+
+
+def _check_invariants(r: Renderer, track: Track, state: CarState) -> None:
+    """Assert the REND-06 invariants (QA-33) for one pose with all buffers enabled."""
+    out = r.render(track, state)
+    assert out.rgb is not None
+    assert out.depth is not None
+    assert out.labels is not None
+    rgb, depth, labels = out.rgb, out.depth, out.labels
+    h, half, far = r.height, r.height // 2, np.float32(r.max_view_distance)
+    floor = np.float32(r.focal / (np.arange(half, h) + 0.5 - half))[:, None]
+    # 1. Sky label exactly where the depth is the view distance.
+    assert np.array_equal(labels == 0, depth == far)
+    # 2. Road and finish only below the horizon, at the floor depth of their row.
+    road = np.isin(labels, (1, 4))
+    assert not road[:half].any()
+    assert np.all(np.where(road[half:], depth[half:] == floor, True))
+    # 3. One horizon-symmetric wall block per column with a single depth and label.
+    wall = np.isin(labels, (2, 3, 5))
+    assert np.array_equal(wall, wall[::-1])
+    edges = np.diff(np.pad(wall.astype(np.int8), ((1, 1), (0, 0))), axis=0)
+    assert np.all(np.abs(edges).sum(axis=0) <= 2)
+    for buf in (depth, labels.astype(np.float32)):
+        hi = np.where(wall, buf, -np.inf).max(axis=0)
+        lo = np.where(wall, buf, np.inf).min(axis=0)
+        assert np.all(hi[wall.any(axis=0)] == lo[wall.any(axis=0)])
+    assert np.all(np.where(wall[half:], depth[half:] <= floor, True))
+    # 4. Depth is positive and finite.
+    assert np.all(np.isfinite(depth))
+    assert np.all(depth > 0)
+    # 6. Sky-labelled pixels show a colour of the sky gradient.
+    sky = np.rint(r._sky).astype(np.uint8)
+    assert np.all((rgb[labels == 0][:, None, :] == sky[None]).all(axis=2).any(axis=1))
+
+
+def _check_toggles(r: Renderer, track: Track, state: CarState) -> None:
+    """Assert that every toggle combination matches the all-on render (invariant 5)."""
+    r.rgb_enabled = r.depth_enabled = r.labels_enabled = True
+    full = r.render(track, state)
+    for flags in itertools.product((False, True), repeat=3):
+        r.rgb_enabled, r.depth_enabled, r.labels_enabled = flags
+        out = r.render(track, state)
+        for on, buf, ref in zip(
+            flags,
+            (out.rgb, out.depth, out.labels),
+            (full.rgb, full.depth, full.labels),
+            strict=True,
+        ):
+            if on:
+                assert buf is not None
+                assert ref is not None
+                assert buf.dtype == ref.dtype
+                assert np.array_equal(buf, ref)
+            else:
+                assert buf is None
+    r.rgb_enabled = r.depth_enabled = r.labels_enabled = True
+
+
+@pytest.mark.parametrize(("w", "h"), [(96, 72), (160, 120)])
+def test_buffer_invariants(w: int, h: int) -> None:
+    r = Renderer(w, h, rgb=True, depth=True, labels=True)
+    for track, state in _poses(167):
+        _check_invariants(r, track, state)
+        _check_toggles(r, track, state)
+
+
+@pytest.mark.parametrize("kwargs", [{"max_view_distance": 9.9}, {"max_view_distance": 200.1}])
+def test_invalid_view_distance(kwargs: dict[str, float]) -> None:
+    with pytest.raises(ValueError, match="must be"):
+        Renderer(**kwargs)
+
+
+def test_view_distance_bounds() -> None:
+    assert Renderer(max_view_distance=10).max_view_distance == 10
+    assert Renderer(max_view_distance=200).max_view_distance == 200
+    assert Renderer().max_view_distance == 60.0
+    r = Renderer(max_view_distance=10, depth=True, labels=True)
+    out = r.render(FAR, ORIGIN)
+    assert out.depth is not None
+    assert out.labels is not None
+    assert np.all(out.depth <= 10.0)
+    assert np.all(out.depth[: r.height // 2] == 10.0)
+    assert np.all(out.labels[: r.height // 2] == 0)
+
+
+@pytest.mark.parametrize(("w", "h"), [(96, 72), (160, 120)])
+def test_depth_labels_shape_dtype(w: int, h: int) -> None:
+    track = load_builtin("oval")
+    out = Renderer(w, h, depth=True, labels=True).render(track, start_state(track))
+    assert out.depth is not None
+    assert out.labels is not None
+    assert (out.depth.dtype, out.depth.shape) == (np.float32, (h, w))
+    assert (out.labels.dtype, out.labels.shape) == (np.uint8, (h, w))
+    assert out.depth.flags.c_contiguous
+    assert out.labels.flags.c_contiguous
+
+
+def test_default_buffers() -> None:
+    r = Renderer()
+    assert (r.rgb_enabled, r.depth_enabled, r.labels_enabled) == (True, False, False)
+    out = r.render(FAR, ORIGIN)
+    assert out.rgb is not None
+    assert out.depth is None
+    assert out.labels is None
+
+
+def test_labels_table() -> None:
+    assert LABELS == {
+        0: "SKY",
+        1: "ROAD",
+        2: "LEFT_BARRIER",
+        3: "RIGHT_BARRIER",
+        4: "FINISH",
+        5: "OBSTACLE",
+    }
+
+
+@pytest.mark.parametrize(
+    "material", [Material.LEFT_BARRIER, Material.RIGHT_BARRIER, Material.OBSTACLE]
+)
+def test_frontal_wall_depth_label(material: Material) -> None:
+    r = Renderer(depth=True, labels=True)
+    out = r.render(_track(FRONTAL, material), ORIGIN)
+    assert out.depth is not None
+    assert out.labels is not None
+    cols = [r.width // 2 - 1, r.width // 2]
+    assert out.depth[r.height // 2, cols] == pytest.approx(D, abs=1e-4)
+    assert np.all(out.labels[r.height // 2, cols] == int(material))
+
+
+def test_finish_line_label() -> None:
+    r = Renderer(labels=True)
+    out = r.render(_track([(100.0, -50.0, 100.0, 50.0)], finish=(19.2, 0.0)), ORIGIN)
+    assert out.labels is not None
+    j, i = r.height // 2 + 2, r.width // 2
+    assert out.labels[j, i] == 4
+    assert out.labels[j - 1, i] == 1
 
 
 def test_public_docstrings() -> None:
