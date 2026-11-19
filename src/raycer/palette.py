@@ -15,6 +15,10 @@ FINISH_A = (20, 20, 20)
 FINISH_B = (240, 240, 240)
 OBSTACLE_A = (240, 170, 30)
 OBSTACLE_B = (30, 30, 30)
+# Skyline layers (STYLE-03): SKY_HORIZON towards (70, 85, 105) at t = 0.4 and 0.8.
+SKYLINE_FAR = (130, 154, 180)
+SKYLINE_NEAR = (90, 108, 130)
+CENTER_LINE = (235, 235, 235)
 
 # Row i is the color of label ID i: SKY, ROAD, LEFT_BARRIER, RIGHT_BARRIER, FINISH, OBSTACLE.
 LABEL_COLORS = np.array(

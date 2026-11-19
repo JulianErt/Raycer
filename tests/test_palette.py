@@ -19,6 +19,15 @@ def test_style_02_values() -> None:
     assert palette.OBSTACLE_B == (30, 30, 30)
 
 
+def test_style_03_05_values() -> None:
+    assert palette.SKYLINE_FAR == (130, 154, 180)
+    assert palette.SKYLINE_NEAR == (90, 108, 130)
+    assert palette.CENTER_LINE == (235, 235, 235)
+    far, near = np.array(palette.SKYLINE_FAR), np.array(palette.SKYLINE_NEAR)
+    assert np.all(near < far)
+    assert np.all(far < palette.SKY_HORIZON)
+
+
 def test_label_colors() -> None:
     colors = palette.LABEL_COLORS
     assert colors.shape == (6, 3)

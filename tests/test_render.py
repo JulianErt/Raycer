@@ -134,12 +134,13 @@ def test_open_view_sky_and_floor() -> None:
     rgb = _rgb(FAR).astype(np.int16)
     half = r.height // 2
     assert np.all(np.abs(rgb[0] - palette.SKY_TOP) <= 1)
-    assert np.all(np.abs(rgb[half - 1] - palette.SKY_HORIZON) <= 1)
     t = np.arange(half) / (half - 1)
     sky = (
         np.array(palette.SKY_TOP) + (np.subtract(palette.SKY_HORIZON, palette.SKY_TOP)) * t[:, None]
     )
-    assert np.all(np.abs(rgb[:half] - sky[:, None]) <= 1)
+    # Above the highest possible skyline every sky row is the gradient.
+    top = half - math.floor(0.25 * half)
+    assert np.all(np.abs(rgb[:top] - sky[:top, None]) <= 1)
     # Every floor pixel is the fogged ROAD_A/ROAD_B checker at its world point (REND-03/08/09).
     depth = (r.focal / (np.arange(half, r.height) + 0.5 - half))[:, None]
     px, py = depth * np.ones(r.width), -depth * _ks(r)
@@ -185,7 +186,8 @@ def test_wall_stripes_and_shading(
     odd = np.floor(u / stripe) % 2 == 1
     assert odd[clean].any()
     assert (~odd[clean]).any()
-    shade = 0.6 + 0.4 / np.hypot(1.0, k)
+    # The wall normal (-1, 0) faces away from the sun, so only ambient and view terms remain.
+    shade = 0.45 + 0.25 / np.hypot(1.0, k)
     expected = _fog(np.where(odd[:, None], b, a) * shade[:, None], D)
     assert np.all(np.abs(rgb[r.height // 2, clean] - expected[clean]) <= 1)
 
@@ -248,7 +250,7 @@ def _check_invariants(r: Renderer, track: Track, state: CarState) -> None:
     assert np.all(np.isfinite(depth))
     assert np.all(depth > 0)
     # 6. Sky-labelled pixels show a colour of the sky gradient.
-    sky = np.rint(r._sky).astype(np.uint8)
+    sky = r.sky_colors
     assert np.all((rgb[labels == 0][:, None, :] == sky[None]).all(axis=2).any(axis=1))
 
 
@@ -361,3 +363,185 @@ def test_public_docstrings() -> None:
         doc = inspect.getdoc(obj)
         assert doc
         assert "\n" not in doc
+
+
+def _skyline_rows(rgb: NDArray[np.uint8], r: Renderer) -> NDArray[np.bool_]:
+    """Sky-half pixels that differ from their gradient row."""
+    half = r.height // 2
+    return np.any(rgb[:half] != r.sky_colors[:half, None], axis=2)
+
+
+def test_sky_colors() -> None:
+    r = Renderer()
+    assert (r.sky_colors.dtype, r.sky_colors.shape) == (np.uint8, (38, 3))
+    assert tuple(r.sky_colors[-2]) == palette.SKYLINE_FAR
+    assert tuple(r.sky_colors[-1]) == palette.SKYLINE_NEAR
+
+
+def test_skyline_rotation() -> None:
+    r = Renderer()
+    base = _rgb(FAR)
+    turned = _rgb(FAR, state=CarState(0.0, 0.0, 0.3, 0.0))
+    assert not np.array_equal(base[: r.height // 2], turned[: r.height // 2])
+    counts = _skyline_rows(base, r).sum(axis=0)
+    angle = np.arctan(_ks(r))
+    for i, j in ((0, 95), (10, 50), (20, 70), (40, 41), (60, 5), (95, 30)):
+        state = CarState(0.0, 0.0, float(angle[j] - angle[i]), 0.0)
+        assert abs(_skyline_rows(_rgb(FAR, state=state), r).sum(axis=0)[j] - counts[i]) <= 1
+
+
+def test_skyline_bounds() -> None:
+    r = Renderer()
+    half = r.height // 2
+    seen: set[tuple[int, ...]] = set()
+    for heading in np.linspace(-np.pi, np.pi, 36, endpoint=False):
+        rgb = _rgb(FAR, state=CarState(0.0, 0.0, float(heading), 0.0))
+        sky = rgb[:half]
+        layer = _skyline_rows(rgb, r)
+        rows = layer.sum(axis=0)
+        # One contiguous run per column that ends at the horizon row.
+        assert np.array_equal(layer, np.arange(half)[:, None] >= half - rows)
+        assert rows.max() <= math.floor(0.25 * half) + 1
+        assert np.all((sky[..., None, :] == r.sky_colors).all(axis=-1).any(axis=-1))
+        seen |= {tuple(int(v) for v in c) for c in sky[layer]}
+    assert seen == {palette.SKYLINE_FAR, palette.SKYLINE_NEAR}
+
+
+@pytest.mark.parametrize(("x", "heading"), [(D, 0.0), (-D, math.pi)])
+def test_sun_shading(x: float, heading: float) -> None:
+    r = Renderer()
+    state = CarState(0.0, 0.0, heading, 0.0)
+    rgb = _rgb(_track([(x, -50.0, x, 50.0)]), state=state).astype(np.int16)
+    k = _ks(r)
+    hy = -k * D if heading == 0.0 else k * D
+    u = hy + 50.0
+    frac = (u / 2.0) % 1
+    clean = (frac > 1e-6) & (frac < 1 - 1e-6)
+    odd = np.floor(u / 2.0) % 2 == 1
+    normal = np.array([-1.0, 0.0]) if x > 0 else np.array([1.0, 0.0])
+    sun = max(0.0, float(normal @ render._SUN))
+    shade = 0.45 + 0.25 / np.hypot(1.0, k) + 0.30 * sun
+    expected = _fog(np.where(odd[:, None], palette.LEFT_B, palette.LEFT_A) * shade[:, None], D)
+    assert np.all(np.abs(rgb[r.height // 2, clean] - expected[clean]) <= 1)
+    assert (sun > 0) == (x < 0)
+
+
+def test_sun_facing_wall_is_brighter() -> None:
+    away = _rgb(_track([(D, -50.0, D, 50.0)])).astype(int)
+    facing = _rgb(_track([(-D, -50.0, -D, 50.0)]), state=CarState(0.0, 0.0, math.pi, 0.0))
+    # Mirrored wall: column i of one view sees the same wall point as column W-1-i of the other.
+    j = Renderer().height // 2
+    assert np.all(facing[j, ::-1].astype(int) >= away[j])
+    assert facing[j].astype(int).sum() > away[j].sum()
+
+
+def test_wall_edge() -> None:
+    r = Renderer()
+    rgb = _rgb(_track(FRONTAL)).astype(float)
+    i = r.width // 2
+    top = r.height // 2 - round(r.focal / D)
+    assert r._dy[top] < -0.84 * r.focal / D <= r._dy[top + 1]
+    f = (D / 60.0) ** 1.5
+    fogless = (rgb[:, i] - f * np.array(palette.FOG)) / (1 - f)
+    assert np.all(np.abs(fogless[top] - 0.7 * fogless[r.height // 2]) <= 1.5)
+    assert np.array_equal(rgb[top + 1, i], rgb[r.height // 2, i])
+
+
+def test_markings() -> None:
+    r = Renderer(160, 120, labels=True)
+    hw = 3.0
+    track = _track(FRONTAL, finish=(5.0, 0.0))
+    track.finish_quad = track.finish_quad + 1000.0  # move the finish line out of view
+    out = r.render(track, ORIGIN)
+    assert out.rgb is not None
+    assert out.labels is not None
+    rgb = out.rgb.astype(np.int16)
+    i, half = r.width // 2, r.height // 2
+    fd = r.focal / (np.arange(half, r.height) + 0.5 - half)
+    curb_row = half + int(np.flatnonzero((fd > 9.4) & (fd < 10.0))[0])
+    depth = r.focal / (curb_row + 0.5 - half)
+    stripes = [_fog(np.array(c, dtype=float), depth) for c in (palette.LEFT_A, palette.LEFT_B)]
+    assert min(np.abs(rgb[curb_row, i] - c).max() for c in stripes) <= 1
+    assert out.labels[curb_row, i] == 1
+    # The centre line sits hw from the wall at x = D - hw; u = y + 50 is on a dash near y = 0.
+    line = np.flatnonzero(np.abs(D - fd - hw) <= 0.075)
+    assert line.size
+    row = half + int(line[0])
+    py = -fd[line[0]] * _ks(r)[i]
+    assert math.floor((py + 50.0) / 3.0) % 2 == 0
+    assert np.all(
+        np.abs(rgb[row, i] - _fog(np.array(palette.CENTER_LINE, float), fd[line[0]])) <= 1
+    )
+    assert out.labels[row, i] == 1
+
+
+def _reference_cast(
+    r: Renderer, track: Track, car_state: CarState
+) -> tuple[Array, Array, NDArray[np.intp], Array, Array]:
+    """Verbatim copy of Renderer._cast from v0.1 (main before STYLE-03..07)."""
+    self = r
+    h = car_state.heading
+    fwd = np.array([math.cos(h), math.sin(h)])
+    right = np.array([math.sin(h), -math.cos(h)])
+    rays = fwd + self._k[:, None] * right
+    w = self.width
+    idx = track.segments_in_radius((car_state.x, car_state.y), self.max_view_distance)
+    depth = np.full(w, self.max_view_distance)
+    if idx.size == 0:
+        return rays, depth, np.zeros(w, dtype=np.intp), np.zeros(w), np.ones(w)
+    a = track.seg_a[idx] - np.array([car_state.x, car_state.y])
+    e = track.seg_b[idx] - track.seg_a[idx]
+    rx, ry = rays[:, 0:1], rays[:, 1:2]
+    denom = rx * e[:, 1] - ry * e[:, 0]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = (a[:, 0] * e[:, 1] - a[:, 1] * e[:, 0]) / denom
+        s = (a[:, 0] * ry - a[:, 1] * rx) / denom
+    t = np.where((s >= 0.0) & (s <= 1.0) & (t > 0.0), t, np.inf)
+    cols = np.arange(w)
+    j = np.argmin(t, axis=1)
+    nearest = t[cols, j]
+    hit = nearest < self.max_view_distance
+    depth[hit] = nearest[hit]
+    cos = np.abs(denom[cols, j]) / (np.hypot(rx[:, 0], ry[:, 0]) * np.linalg.norm(e[j], axis=1))
+    return rays, depth, idx[j], s[cols, j], cos
+
+
+def _reference_depth_labels(
+    r: Renderer, track: Track, car_state: CarState
+) -> tuple[NDArray[np.float32], NDArray[np.uint8]]:
+    """Verbatim copy of the v0.1 depth and labels blocks of Renderer.render."""
+    self = r
+    rays, depth, seg, _, _ = _reference_cast(r, track, car_state)
+    half = self.height // 2
+    mvd = self.max_view_distance
+    mask = (np.abs(self._dy)[:, None] <= self.focal * render.CAMERA_HEIGHT / depth) & (depth < mvd)
+    fd = self._floor_depth[:, None]
+    mat = track.seg_material[seg]
+    px = car_state.x + fd * rays[:, 0]
+    py = car_state.y + fd * rays[:, 1]
+    q = track.finish_quad
+    edge = q[[1, 2, 3, 0]] - q
+    e4, q4 = edge[:, :, None, None], q[:, :, None, None]
+    side = e4[:, 0] * (py - q4[:, 1]) - e4[:, 1] * (px - q4[:, 0])
+    inside = np.all(side >= 0, axis=0) | np.all(side <= 0, axis=0)
+    far = np.float32(mvd)
+    dbuf = np.full((self.height, self.width), far, dtype=np.float32)
+    dbuf[half:] = fd.astype(np.float32)
+    dbuf = np.where(mask, depth.astype(np.float32)[None], dbuf)
+    dbuf = np.ascontiguousarray(np.minimum(dbuf, far))
+    lbuf = np.zeros((self.height, self.width), dtype=np.uint8)
+    lbuf[half:] = np.where(inside, 4, 1)
+    lbuf = np.where(mask, mat[None], lbuf).astype(np.uint8)
+    lbuf[dbuf == far] = 0
+    return dbuf, lbuf
+
+
+def test_ground_truth_matches_v01() -> None:
+    r = Renderer(96, 72, rgb=True, depth=True, labels=True)
+    poses = _poses(67)
+    assert len(poses) == 201
+    for track, state in poses:
+        out = r.render(track, state)
+        depth, labels = _reference_depth_labels(r, track, state)
+        assert np.array_equal(out.depth, depth)
+        assert np.array_equal(out.labels, labels)
