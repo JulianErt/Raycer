@@ -28,3 +28,11 @@
 
 The splits are disjoint. `proc-train-v0` uses `train` and `proc-test-v0` uses `test`; `val` is
 available to custom scenarios via `split = "val"`.
+
+## Appearance splits
+
+With appearance randomization on (`[appearance] randomize = true` or `Game.set_appearance`),
+the appearance parameters of each episode are drawn from `PCG64([episode_seed, 0xA77])`, a
+stream separate from the track. The hue offset lies in [0, 270) degrees for `train` and in
+[270, 360) degrees for `test`. The track, depth and labels are identical with and without
+randomization.

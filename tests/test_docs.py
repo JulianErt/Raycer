@@ -37,10 +37,17 @@ def _doc_files() -> list[Path]:
     return [README, *sorted(DOCS.glob("*.md"))]
 
 
-def _test_blocks() -> list[str]:
-    """Return the README python blocks directly preceded by a <!-- test --> line."""
+def _test_blocks(text: str | None = None) -> list[str]:
+    """Return the python blocks of text (default README) preceded by a <!-- test --> line."""
     pattern = r"^<!-- test -->\n```python\n(.*?)^```$"
-    return re.findall(pattern, README.read_text(encoding="utf-8"), re.MULTILINE | re.DOTALL)
+    text = README.read_text(encoding="utf-8") if text is None else text
+    return re.findall(pattern, text, re.MULTILINE | re.DOTALL)
+
+
+def _section(name: str) -> str:
+    """Return the README text of the ## section name up to the next ## heading."""
+    text = README.read_text(encoding="utf-8")
+    return text.split(f"\n## {name}\n", 1)[1].split("\n## ", 1)[0]
 
 
 def _help(argv: list[str]) -> str:
@@ -55,7 +62,8 @@ def _help(argv: list[str]) -> str:
 def test_readme_code_blocks_run_DOC04(tmp_path: Path) -> None:
     blocks = _test_blocks()
     assert len(blocks) >= 2
-    assert sum(1 for b in blocks for line in b.splitlines() if line.strip()) <= 15
+    quickstart = _test_blocks(_section("Quickstart"))
+    assert sum(1 for b in quickstart for line in b.splitlines() if line.strip()) <= 15
     env = {**os.environ, "SDL_VIDEODRIVER": "dummy"}
     for block in blocks:
         result = subprocess.run([sys.executable, "-c", block], cwd=tmp_path, env=env)
@@ -95,11 +103,31 @@ def test_cli_flags_exist_DOC04() -> None:
 def test_readme_order_DOC01() -> None:
     text = README.read_text(encoding="utf-8")
     headings = re.findall(r"^## (.+)$", text, re.MULTILINE)
-    assert headings[: len(HEADINGS)] == HEADINGS
+    assert [h for h in headings if h in HEADINGS] == HEADINGS
     intro = text.split("\n## Installation\n", 1)[0]
     assert "](docs/img/buffers.png)" in intro
     sentence = [ln for ln in intro.splitlines()[1:] if ln.strip() and not ln.startswith("![")]
     assert sentence
+
+
+def test_readme_playing_and_dr_DOC05() -> None:
+    headings = re.findall(r"^## (.+)$", README.read_text(encoding="utf-8"), re.MULTILINE)
+    assert "Playing" in headings
+    assert "Domain randomization" in headings
+    playing = _section("Playing")
+    for key in ("R", "P", "M", "F1", "Tab", "F11", "F12", "Esc"):
+        assert re.search(rf"\b{key}\b", playing), key
+    dr = _section("Domain randomization")
+    for text in (
+        "[appearance]",
+        "randomize",
+        "strength",
+        "Raycer/ProcTrainDR-v0",
+        "Raycer/ProcTestDR-v0",
+        'info["appearance"]',
+    ):
+        assert text in dr, text
+    assert _test_blocks(dr)
 
 
 def test_buffers_image_DOC01() -> None:
@@ -137,7 +165,12 @@ def test_citation_and_changelog_DOC04() -> None:
     assert "https://keepachangelog.com/en/1.1.0/" in changelog
     assert "Semantic Versioning" in changelog
     assert re.search(r"^## \[Unreleased\]$", changelog, re.MULTILINE)
-    assert re.search(r"^## \[0\.1\.0\] - \d{4}-\d{2}-\d{2}$", changelog, re.MULTILINE)
+    new = re.search(r"^## \[0\.2\.0\] - \d{4}-\d{2}-\d{2}$", changelog, re.MULTILINE)
+    old = re.search(r"^## \[0\.1\.0\] - \d{4}-\d{2}-\d{2}$", changelog, re.MULTILINE)
+    assert new
+    assert old
+    assert new.start() < old.start()
+    assert "### Added" in changelog[new.end() : old.start()]
     assert "### Added" in changelog.split("## [0.1.0]", 1)[1]
 
 

@@ -36,6 +36,11 @@ time = 0.01
 collision = 1.0
 wrongway = 0.05
 lap = 10.0
+
+[appearance]                  # domain randomization, see the README
+randomize = false
+split = "train"               # "train" or "test" hue range
+strength = 1.0                # 0 to 1
 ```
 
 Unknown keys raise `ValueError` naming the file and the key.
@@ -59,10 +64,12 @@ Unknown keys raise `ValueError` naming the file and the key.
 | `technical-v0` | `Raycer/Technical-v0` | builtin `technical` | 1 | 4000 | fixed track with obstacles |
 | `proc-train-v0` | `Raycer/ProcTrain-v0` | procedural `medium`, split train | 1 | 4000 | training distribution |
 | `proc-test-v0` | `Raycer/ProcTest-v0` | procedural `medium`, split test | 1 | 4000 | evaluation only, disjoint |
+| `proc-train-dr-v0` | `Raycer/ProcTrainDR-v0` | procedural `medium`, split train, appearance `train` | 1 | 4000 | training with randomized appearance |
+| `proc-test-dr-v0` | `Raycer/ProcTestDR-v0` | procedural `medium`, split test, appearance `test` | 1 | 4000 | evaluation on unseen appearance |
 | `time-trial-v0` | `Raycer/TimeTrial-v0` | builtin `oval` | 3 | 9000 | `w_time = 0.05`, lap times |
 
 `import raycer` registers each ID plus a `-Continuous-v0` variant (for example
-`Raycer/ProcTrain-Continuous-v0`), 12 IDs in total, all with
+`Raycer/ProcTrain-Continuous-v0`), 16 IDs in total, all with
 `entry_point="raycer.env:RaycerEnv"`. The version suffix is raised whenever observations,
 rewards or dynamics change for the same seed.
 

@@ -35,4 +35,5 @@ of arrays, with `meta` parsed into a dict.
 
 `raycer play --record DIR` records the episodes you drive. `raycer play --replay FILE` replays
 the recorded actions with the same seed and track seed. Both need `raycer[human]`, and the two
-flags cannot be combined.
+flags cannot be combined. `--replay` skips the 3-2-1 countdown. The keys are listed in the
+README section [Playing](../README.md#playing).

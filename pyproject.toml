@@ -1,6 +1,6 @@
 [project]
 name = "raycer"
-version = "0.1.0"
+version = "0.2.0"
 description = "A raycasting racing environment for machine learning research"
 readme = "README.md"
 license = "MIT"

@@ -18,6 +18,7 @@ Configure before `init()`; setters called after `init()` raise `RuntimeError`.
 | `set_episode_timeout(steps)` | Timeout in env steps, 0 (default) means unlimited |
 | `set_frame_skip(n)` | Physics ticks (1/60 s) per env step, 1 to 16, default 4 |
 | `set_reward_config(**weights)` | Override reward weights (`w_progress`, `w_time`, `w_collision`, `w_wrongway`, `w_lap`); applies from the next episode |
+| `set_appearance(randomize, split="train", strength=1.0)` | Per-episode appearance randomization; `split` is `"train"` or `"test"`, `strength` 0 to 1 |
 | `set_seed(seed)` | Seed used from the next episode |
 | `init()` | Freeze the configuration and start the first episode |
 | `new_episode(seed=None)` | Reset car, progress and reward |
@@ -79,6 +80,7 @@ RaycerEnv(scenario="oval-v0", *, config_path=None, render_mode=None,
 | `wrong_way_steps` | Cumulative steps driving the wrong way |
 | `lap_times` | List of lap times in seconds |
 | `is_success` | True once all target laps are done |
+| `appearance` | Only with appearance randomization on: dict of the drawn appearance parameters |
 | `depth_m` | Only with `metric_depth_info=True`: `float32 (H, W)` depth in metres |
 
 ### Episode end

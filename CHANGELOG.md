@@ -6,6 +6,24 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-20
+
+### Added
+
+- Skyline, sun lighting and road markings in the RGB buffer.
+- Human viewer upgrade: scalable window, HUD, minimap, countdown, pause, finish and help
+  overlays, ramped continuous controls, `raycer play --discrete` and F11 fullscreen.
+- Domain randomization: the `[appearance]` table, `Game.set_appearance`, `info["appearance"]`,
+  the scenarios `proc-train-dr-v0` and `proc-test-dr-v0` and their Gym IDs
+  `Raycer/ProcTrainDR-v0`, `Raycer/ProcTestDR-v0`, `Raycer/ProcTrainDR-Continuous-v0` and
+  `Raycer/ProcTestDR-Continuous-v0`.
+
+### Changed
+
+- `raycer play` uses continuous controls with ramps by default; `--discrete` selects the
+  discrete action space.
+- The golden RGB images changed with the new look.
+
 ## [0.1.0] - 2026-11-19
 
 ### Added

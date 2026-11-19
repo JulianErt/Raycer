@@ -122,13 +122,66 @@ raycer --version
 raycer list
 raycer benchmark --scenario technical-v0 --steps 5000 --width 96 --height 72 --buffers screen,depth,labels --seed 0 --json --min-sps 250
 raycer render-sample --scenario oval-v0 --seed 0 --steps 60 --width 320 --height 240 --out samples
-raycer play --scenario oval-v0 --seed 0 --width 320 --height 240 --depth --labels --continuous --record recordings
+raycer play --scenario oval-v0 --seed 0 --width 320 --height 240 --depth --labels --record recordings
 raycer play --replay recordings/oval-v0_snone_20260101-120000.npz
 ```
 
-`raycer play` needs the `human` extra. Keys: arrows or WASD to drive, R reset, P pause, Tab
-switches the view, F12 screenshot, Esc quits. See [docs/benchmark.md](docs/benchmark.md) and
+`raycer play` needs the `human` extra; keys and controls are in [Playing](#playing). See
+[docs/benchmark.md](docs/benchmark.md) and [docs/recording.md](docs/recording.md).
+
+## Playing
+
+Install the viewer with `uv add "raycer[human]"`, then drive:
+
+```bash
+raycer play --scenario oval-v0
+raycer play --scenario technical-v0 --discrete
+```
+
+| Key | Action |
+| --- | --- |
+| W/A/S/D or arrows | drive |
+| R | restart |
+| P | pause |
+| M | minimap (on by default) |
+| H/F1 | help overlay |
+| Tab | switch view |
+| F11 | fullscreen |
+| F12 | screenshot, written to the current directory as `raycer_<timestamp>.png` |
+| Esc | quit |
+
+Each episode starts after a 3-2-1 countdown and ends with a finish screen. Steering and
+throttle use continuous controls with ramps by default; `--discrete` selects the discrete
+action space. `--record DIR` records your episodes and `--replay FILE` replays one, see
 [docs/recording.md](docs/recording.md).
+
+## Domain randomization
+
+The `[appearance]` table of a scenario TOML, or `Game.set_appearance(randomize, split="train",
+strength=1.0)`, randomizes the look of each episode:
+
+```toml
+[appearance]
+randomize = false   # true turns randomization on
+split = "train"     # "train" or "test"
+strength = 1.0      # 0 to 1
+```
+
+Randomized are hue, brightness, saturation, sky/fog color, A/B color swaps, stripe periods and
+the skyline phase, all scaled by `strength`. Depth and labels stay bit-identical, and the
+parameters are drawn from the episode seed. The hue offset lies in [0°, 270°) for `train` and
+in [270°, 360°) for `test`. The scenarios `proc-train-dr-v0` (`Raycer/ProcTrainDR-v0`) and
+`proc-test-dr-v0` (`Raycer/ProcTestDR-v0`) use these splits:
+
+<!-- test -->
+```python
+import gymnasium
+import raycer  # noqa: F401
+
+env = gymnasium.make("Raycer/ProcTrainDR-v0")
+obs, info = env.reset(seed=0)
+print(info["appearance"]["hue_offset_deg"])
+```
 
 ## For ViZDoom users
 

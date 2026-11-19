@@ -5,7 +5,7 @@ from raycer.cli import main
 
 
 def test_version_matches_metadata() -> None:
-    assert raycer.__version__ == "0.1.0"
+    assert raycer.__version__ == "0.2.0"
 
 
 def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
