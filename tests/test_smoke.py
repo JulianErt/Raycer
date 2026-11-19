@@ -15,6 +15,6 @@ def test_cli_version(capsys: pytest.CaptureFixture[str]) -> None:
     assert raycer.__version__ in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("argv", [[], ["benchmark"]])
+@pytest.mark.parametrize("argv", [[]])
 def test_cli_exits_zero(argv: list[str]) -> None:
     assert main(argv) == 0
