@@ -545,3 +545,18 @@ def test_ground_truth_matches_v01() -> None:
         depth, labels = _reference_depth_labels(r, track, state)
         assert np.array_equal(out.depth, depth)
         assert np.array_equal(out.labels, labels)
+
+
+def test_set_appearance_API21() -> None:
+    track = load_builtin("technical")
+    state = start_state(track)
+    r = Renderer()
+    base = _rgb(track, r, state)
+    params = palette.draw_appearance(1, "test", 1.0)
+    r.set_appearance(params)
+    out = r.render(track, state)
+    assert out.rgb is not None
+    assert not np.array_equal(out.rgb, base)
+    assert not np.array_equal(r.sky_colors, Renderer().sky_colors)
+    r.set_appearance(None)
+    assert np.array_equal(_rgb(track, r, state), base)

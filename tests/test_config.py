@@ -9,7 +9,16 @@ import raycer
 from raycer import config
 from raycer.config import list_scenarios, load_config
 
-NAMES = ["kidney-v0", "oval-v0", "proc-test-v0", "proc-train-v0", "technical-v0", "time-trial-v0"]
+NAMES = [
+    "kidney-v0",
+    "oval-v0",
+    "proc-test-dr-v0",
+    "proc-test-v0",
+    "proc-train-dr-v0",
+    "proc-train-v0",
+    "technical-v0",
+    "time-trial-v0",
+]
 DEFAULT_REWARD = {"progress": 0.1, "time": 0.01, "collision": 1.0, "wrongway": 0.05, "lap": 10.0}
 EXPECTED = {
     "oval-v0": ("oval", {"type": "builtin", "builtin": "oval"}, 1, 3000),
@@ -23,6 +32,18 @@ EXPECTED = {
     ),
     "proc-test-v0": (
         "proc-test",
+        {"type": "procedural", "preset": "medium", "split": "test"},
+        1,
+        4000,
+    ),
+    "proc-train-dr-v0": (
+        "proc-train-dr",
+        {"type": "procedural", "preset": "medium", "split": "train"},
+        1,
+        4000,
+    ),
+    "proc-test-dr-v0": (
+        "proc-test-dr",
         {"type": "procedural", "preset": "medium", "split": "test"},
         1,
         4000,
@@ -56,6 +77,9 @@ def test_scenario_values(scenario: str) -> None:
     assert cfg["physics"] == {"frame_skip": 4}
     reward = dict(DEFAULT_REWARD, time=0.05) if scenario == "time-trial-v0" else DEFAULT_REWARD
     assert cfg["reward"] == reward
+    dr = "-dr-" in scenario
+    split = track["split"] if dr else "train"
+    assert cfg["appearance"] == {"randomize": dr, "split": split, "strength": 1.0}
 
 
 def test_stem_matches_name_and_version() -> None:
@@ -148,3 +172,11 @@ def test_wheel_contains_scenarios(tmp_path: Path) -> None:
     entries = set(zipfile.ZipFile(wheel).namelist())
     for name in NAMES:
         assert f"raycer/scenarios/{name}.toml" in entries
+
+
+def test_appearance_default_API21() -> None:
+    assert load_config("oval-v0")["appearance"] == {
+        "randomize": False,
+        "split": "train",
+        "strength": 1.0,
+    }

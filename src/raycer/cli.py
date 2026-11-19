@@ -15,7 +15,7 @@ import numpy as np
 import raycer
 from raycer import physics
 from raycer._png import write_png
-from raycer.config import list_scenarios, load_config
+from raycer.config import gym_name, list_scenarios, load_config
 from raycer.env import RaycerEnv
 from raycer.game import DISCRETE_ACTIONS, Game
 from raycer.palette import LABEL_COLORS
@@ -205,7 +205,7 @@ def _render_sample(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
 def _list() -> int:
     """Print each scenario with its Gym IDs."""
     for name in list_scenarios():
-        camel = "".join(part.capitalize() for part in name.removesuffix("-v0").split("-"))
+        camel = gym_name(name)
         print(f"{name}  Raycer/{camel}-v0  Raycer/{camel}-Continuous-v0")
     return 0
 

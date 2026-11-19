@@ -16,17 +16,10 @@ from raycer.track import Material, Track
 Array = NDArray[np.float64]
 
 CAMERA_HEIGHT = 1.0
-# Stripe colours A/B and stripe width per material, indexed by material ID.
-_STRIPE_A = np.zeros((6, 3))
-_STRIPE_B = np.zeros((6, 3))
+# Striped wall materials and their stripe width per material ID; colours come from the palette.
+_WALLS = [Material.LEFT_BARRIER, Material.RIGHT_BARRIER, Material.OBSTACLE]
 _STRIPE_W = np.ones(6)
-for _m, _a, _b, _w in (
-    (Material.LEFT_BARRIER, palette.LEFT_A, palette.LEFT_B, 2.0),
-    (Material.RIGHT_BARRIER, palette.RIGHT_A, palette.RIGHT_B, 2.0),
-    (Material.OBSTACLE, palette.OBSTACLE_A, palette.OBSTACLE_B, 0.5),
-):
-    _STRIPE_A[_m], _STRIPE_B[_m], _STRIPE_W[_m] = _a, _b, _w
-_FOG = np.array(palette.FOG, dtype=np.float64)
+_STRIPE_W[_WALLS] = 2.0, 2.0, 0.5
 # Skyline sine terms (amplitude, integer frequency, phase); frequency 0 is the base height.
 _SKYLINE_FAR = np.array([[0.12, 0, math.pi / 2], [0.06, 2, 0.5], [0.04, 5, 1.3], [0.02, 11, 2.1]])
 _SKYLINE_NEAR = np.array([[0.06, 0, math.pi / 2], [0.05, 3, 2.0], [0.03, 7, 0.4], [0.015, 13, 4.0]])
@@ -34,13 +27,6 @@ _SKYLINE_NEAR = np.array([[0.06, 0, math.pi / 2], [0.05, 3, 2.0], [0.03, 7, 0.4]
 _SUN = np.array([math.cos(math.radians(35.0)), math.sin(math.radians(35.0))])
 _CURB_WIDTH = 0.6
 # Floor colour table: rows 0..5 stripe A and 6..11 stripe B per material, then road, finish, line.
-_FLOOR_COLORS = np.vstack(
-    [
-        _STRIPE_A,
-        _STRIPE_B,
-        [palette.ROAD_A, palette.ROAD_B, palette.FINISH_A, palette.FINISH_B, palette.CENTER_LINE],
-    ]
-)
 _ROAD, _FINISH, _CENTER = 12, 14, 16
 _CENTER_HALF_WIDTH = 0.075
 # Label IDs of the labels buffer (REND-05); wall IDs equal track.Material.
@@ -69,10 +55,10 @@ def _skyline(phi: Array, terms: Array) -> Array:
     return np.clip(h, 0.0, 0.25)
 
 
-def _fog(colour: Array, depth: Array, max_view_distance: float) -> Array:
-    """Blend colour towards FOG with factor min(1, depth/max)^1.5."""
+def _fog(colour: Array, depth: Array, max_view_distance: float, fog: Array) -> Array:
+    """Blend colour towards the fog colour with factor min(1, depth/max)^1.5."""
     f = np.minimum(1.0, depth / max_view_distance) ** 1.5
-    return colour + (_FOG - colour) * f[..., None]
+    return colour + (fog - colour) * f[..., None]
 
 
 class Renderer:
@@ -111,20 +97,41 @@ class Renderer:
         self._dy = np.arange(height) + 0.5 - height / 2
         # Floor depth of rows H/2.. (dy > 0); rows above are sky or wall.
         self._floor_depth = self.focal * CAMERA_HEIGHT / self._dy[half:]
-        t = (np.arange(half) / (half - 1))[:, None]
-        top, horizon = np.array(palette.SKY_TOP), np.array(palette.SKY_HORIZON)
-        self._sky = top + (horizon - top) * t
-        # Every colour a sky-labelled RGB pixel can have: gradient rows and both skyline layers.
-        self.sky_colors = np.vstack(
-            [np.rint(self._sky), [palette.SKYLINE_FAR, palette.SKYLINE_NEAR]]
-        ).astype(np.uint8)
         self._angle = np.arctan(self._k)
-        # Fogged floor colours per row, flattened; pixel colour index is row offset + table row.
-        fog = np.asarray(self._floor_depth[:, None], dtype=np.float64)
-        self._floor_table = _fog(_FLOOR_COLORS[None], fog, max_view_distance).reshape(-1, 3)
-        self._floor_row = (np.arange(half) * len(_FLOOR_COLORS))[:, None]
+        # Pixel colour index into the fogged floor table is row offset + table row.
+        self._floor_row = (np.arange(half) * (_CENTER + 1))[:, None]
         # Rows above the horizon counted from it: row H/2 - 1 is 1.
         self._rise = (half - np.arange(half))[:, None]
+        self.set_appearance(None)
+
+    def set_appearance(self, params: dict[str, float] | None) -> None:
+        """Rebuild colours, periods and skyline phase from the palette, randomized by params."""
+        c = palette.appearance_colors(params)
+        self._period = 1.0 if params is None else params["period_scale"]
+        self._skyline_phase = 0.0 if params is None else params["skyline_phase"]
+        self._fog_colour = np.array(c["FOG"], dtype=np.float64)
+        self._skyline_colours = c["SKYLINE_FAR"], c["SKYLINE_NEAR"]
+        half = self.height // 2
+        t = (np.arange(half) / (half - 1))[:, None]
+        top, horizon = np.array(c["SKY_TOP"]), np.array(c["SKY_HORIZON"])
+        self._sky = top + (horizon - top) * t
+        # Every colour a sky-labelled RGB pixel can have: gradient rows and both skyline layers.
+        self.sky_colors = np.vstack([np.rint(self._sky), *self._skyline_colours]).astype(np.uint8)
+        self._stripe_a, self._stripe_b = np.zeros((6, 3)), np.zeros((6, 3))
+        self._stripe_a[_WALLS] = c["LEFT_A"], c["RIGHT_A"], c["OBSTACLE_A"]
+        self._stripe_b[_WALLS] = c["LEFT_B"], c["RIGHT_B"], c["OBSTACLE_B"]
+        floor = np.vstack(
+            [
+                self._stripe_a,
+                self._stripe_b,
+                [c["ROAD_A"], c["ROAD_B"], c["FINISH_A"], c["FINISH_B"], c["CENTER_LINE"]],
+            ]
+        )
+        # Fogged floor colours per row, flattened.
+        fd = np.asarray(self._floor_depth[:, None], dtype=np.float64)
+        self._floor_table = _fog(floor[None], fd, self.max_view_distance, self._fog_colour).reshape(
+            -1, 3
+        )
 
     def _cast(
         self, track: Track, car_state: CarState
@@ -192,12 +199,11 @@ class Renderer:
         if self.rgb_enabled:
             img = np.empty((self.height, self.width, 3))
             # STYLE-03: far, then near mountain layer over the sky gradient.
-            phi = car_state.heading - self._angle
+            phi = car_state.heading - self._angle + self._skyline_phase
             far_layer = self._rise <= half * _skyline(phi, _SKYLINE_FAR)
             near_layer = self._rise <= half * _skyline(phi, _SKYLINE_NEAR)
             img[:half] = self._sky[:, None, :]
-            img[:half][far_layer] = palette.SKYLINE_FAR
-            img[:half][near_layer] = palette.SKYLINE_NEAR
+            img[:half][far_layer], img[:half][near_layer] = self._skyline_colours
             a = track.seg_a[seg]
             e = track.seg_b[seg] - a
             elen = np.linalg.norm(e, axis=1)
@@ -207,14 +213,15 @@ class Renderer:
             ndr = (n * rays).sum(axis=1)
             n = np.where((ndr > 0)[:, None], -n, n)
             # STYLE-05: floor colour index into _FLOOR_COLORS, markings from the hit wall.
-            ci = _ROAD + ((np.floor(px / 4.0) + np.floor(py / 4.0)).astype(np.intp) & 1)
+            road = 4.0 * self._period
+            ci = _ROAD + ((np.floor(px / road) + np.floor(py / road)).astype(np.intp) & 1)
             barrier = (depth < mvd) & (
                 (mat == Material.LEFT_BARRIER) | (mat == Material.RIGHT_BARRIER)
             )
             front = barrier & (fd < depth)
             dist = (depth - fd) * np.abs(ndr)
             uf = track.seg_u0[seg] + (px - a[:, 0]) * eh[:, 0] + (py - a[:, 1]) * eh[:, 1]
-            stripe = mat + 6 * (np.floor(uf).astype(np.intp) & 1)
+            stripe = mat + 6 * (np.floor(uf / self._period).astype(np.intp) & 1)
             ci = np.where(front & (dist <= _CURB_WIDTH), stripe, ci)
             pos = np.array([car_state.x, car_state.y])
             reach = mvd + float(track.width.max())
@@ -227,20 +234,21 @@ class Renderer:
                 dash = (np.floor(uf / 3.0).astype(np.intp) & 1) == 0
                 line = front & dash & (np.abs(dist - hw) <= _CENTER_HALF_WIDTH)
                 ci = np.where(line, _CENTER, ci)
-            fin = _FINISH + ((np.floor(px / 0.5) + np.floor(py / 0.5)).astype(np.intp) & 1)
+            cell = 0.5 * self._period
+            fin = _FINISH + ((np.floor(px / cell) + np.floor(py / cell)).astype(np.intp) & 1)
             ci = np.where(inside, fin, ci)
             img[half:] = self._floor_table[self._floor_row + ci]
             u = track.seg_u0[seg] + s * elen
-            odd = np.floor(u / _STRIPE_W[mat]) % 2 == 1
+            odd = np.floor(u / (_STRIPE_W[mat] * self._period)) % 2 == 1
             # STYLE-04: ambient, view angle and sun term.
             shade = 0.45 + 0.25 * cos + 0.30 * np.maximum(0.0, n @ _SUN)
-            wall = np.where(odd[:, None], _STRIPE_B[mat], _STRIPE_A[mat]) * shade[:, None]
-            img = np.where(mask[..., None], _fog(wall, depth, mvd)[None], img)
+            wall = np.where(odd[:, None], self._stripe_b[mat], self._stripe_a[mat]) * shade[:, None]
+            img = np.where(mask[..., None], _fog(wall, depth, mvd, self._fog_colour)[None], img)
             # STYLE-06: the top 8 % of the wall block is darker; it lies above the horizon.
             edge = mask[:half] & (
                 self._dy[:half, None] < -0.84 * self.focal * CAMERA_HEIGHT / depth
             )
             rows, cols = np.nonzero(edge)
-            img[rows, cols] = _fog(0.7 * wall[cols], depth[cols], mvd)
+            img[rows, cols] = _fog(0.7 * wall[cols], depth[cols], mvd, self._fog_colour)
             rgb = np.ascontiguousarray(np.clip(np.rint(img), 0, 255).astype(np.uint8))
         return RenderOutput(rgb=rgb, depth=dbuf if self.depth_enabled else None, labels=lbuf)

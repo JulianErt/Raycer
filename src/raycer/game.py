@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from raycer import physics
+from raycer import palette, physics
 from raycer.physics import DT, Action, CarParams, CarState
 from raycer.progress import ProgressState, ProgressTracker
 from raycer.render import LABELS, Renderer, RenderOutput
@@ -84,6 +84,8 @@ class Game:
         self._timeout = 0
         self._frame_skip = 4
         self._seed = 0
+        self._appearance_cfg: tuple[bool, str, float] = (False, "train", 1.0)
+        self._appearance: dict[str, float] | None = None
         self._pending_weights = dict(_DEFAULT_WEIGHTS)
         self._weights = dict(_DEFAULT_WEIGHTS)
         self._params = CarParams()
@@ -121,6 +123,13 @@ class Game:
             self._laps = int(cfg["laps"])
         if "reward" in cfg:
             self.set_reward_config(**{f"w_{k}": v for k, v in cfg["reward"].items()})
+        if "appearance" in cfg:
+            app, (randomize, split, strength) = cfg["appearance"], self._appearance_cfg
+            self.set_appearance(
+                app.get("randomize", randomize),
+                app.get("split", split),
+                app.get("strength", strength),
+            )
 
     def set_scenario(self, name: str) -> None:
         """Select a builtin-track scenario such as "oval-v0"."""
@@ -163,6 +172,15 @@ class Game:
         if not 1 <= n <= 16:
             raise ValueError(f"frame_skip must be in 1..16, got {n}")
         self._frame_skip = n
+
+    def set_appearance(self, randomize: bool, split: str = "train", strength: float = 1.0) -> None:
+        """Enable per-episode appearance randomization (API-21) for a split and strength."""
+        self._check_not_initialized("set_appearance")
+        if split not in ("train", "test"):
+            raise ValueError(f"appearance split must be 'train' or 'test', got {split!r}")
+        if not 0.0 <= strength <= 1.0:
+            raise ValueError(f"appearance strength must be in [0, 1], got {strength}")
+        self._appearance_cfg = (randomize, split, strength)
 
     def set_reward_config(self, **weights: float) -> None:
         """Override reward weights (API-09 keys); they apply from the next episode."""
@@ -217,6 +235,10 @@ class Game:
         self._prev_collided = False
         self._step_collided = False
         self._weights = dict(self._pending_weights)
+        randomize, split, strength = self._appearance_cfg
+        if randomize:
+            self._appearance = palette.draw_appearance(self._seed, split, strength)
+            self._renderer.set_appearance(self._appearance)
         self._output: RenderOutput = self._renderer.render(self._track, self._car)
 
     def make_action(self, action: int | Sequence[float]) -> float:

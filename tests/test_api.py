@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from raycer import DISCRETE_ACTIONS, GAME_VARIABLES, Game, GameState
+from raycer import DISCRETE_ACTIONS, GAME_VARIABLES, Game, GameState, palette
 
 P = inspect.Parameter
 _POS = P.POSITIONAL_OR_KEYWORD
@@ -20,6 +20,11 @@ SIGNATURES: dict[str, list[tuple[str, inspect._ParameterKind, object]]] = {
     "set_labels_buffer_enabled": [("enabled", _POS, P.empty)],
     "set_episode_timeout": [("steps", _POS, P.empty)],
     "set_frame_skip": [("n", _POS, P.empty)],
+    "set_appearance": [
+        ("randomize", _POS, P.empty),
+        ("split", _POS, "train"),
+        ("strength", _POS, 1.0),
+    ],
     "set_reward_config": [("weights", P.VAR_KEYWORD, P.empty)],
     "set_seed": [("seed", _POS, P.empty)],
     "init": [],
@@ -45,6 +50,7 @@ SETTERS = {
     "set_labels_buffer_enabled": (True,),
     "set_episode_timeout": (10,),
     "set_frame_skip": (2,),
+    "set_appearance": (True,),
 }
 
 
@@ -286,3 +292,21 @@ def test_scenarios() -> None:
         other.set_screen_resolution(64, 48)
         other.init()
         assert _state(other).game_variables[0] == 0
+
+
+def test_set_appearance_validation_API21() -> None:
+    with pytest.raises(ValueError, match="split"):
+        Game().set_appearance(True, split="val")
+    for strength in (1.5, -0.1):
+        with pytest.raises(ValueError, match="strength"):
+            Game().set_appearance(True, strength=strength)
+
+
+def test_set_appearance_load_config_API21(tmp_path: Path) -> None:
+    path = tmp_path / "dr.toml"
+    path.write_text('[appearance]\nrandomize = true\nsplit = "test"\n', encoding="utf-8")
+    game = Game()
+    game.load_config(path)
+    game.set_seed(5)
+    game.init()
+    assert game._appearance == palette.draw_appearance(5, "test", 1.0)

@@ -78,6 +78,7 @@ class RaycerEnv(gym.Env[Obs, Any]):
         self.game.set_reward_config(**{f"w_{k}": v for k, v in cfg["reward"].items()})
         if reward is not None:
             self.game.set_reward_config(**reward)
+        self.game.set_appearance(**cfg["appearance"])
         self.game.init()
         if self._track_cfg["type"] == "builtin":
             self.game._set_track(load_builtin(self._track_cfg["builtin"]), self._laps)
@@ -127,7 +128,8 @@ class RaycerEnv(gym.Env[Obs, Any]):
         elif track_seed is not None:
             raise ValueError(f"scenario {self._scenario!r} has a builtin track, no track_seed")
         self._track_seed = track_seed
-        self.game.new_episode()
+        # spawn() leaves the parent stream untouched, so track seeds do not depend on DR.
+        self.game.new_episode(seed=int(self.np_random.spawn(1)[0].integers(2**63)))
         self._steps = 0
         self._wrong_way_steps = 0
         self._lap_times = []
@@ -211,4 +213,6 @@ class RaycerEnv(gym.Env[Obs, Any]):
         if self._metric_depth_info:
             assert state.depth_buffer is not None
             info["depth_m"] = state.depth_buffer.astype(np.float32, copy=True)
+        if self.game._appearance is not None:
+            info["appearance"] = dict(self.game._appearance)
         return info

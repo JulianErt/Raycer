@@ -58,6 +58,8 @@ More in [`examples/`](examples/README.md) and [`docs/`](docs/api.md).
 | `technical-v0` | `Raycer/Technical-v0` | builtin `technical` (with obstacles) | 1 | 4000 |
 | `proc-train-v0` | `Raycer/ProcTrain-v0` | procedural `medium`, split train | 1 | 4000 |
 | `proc-test-v0` | `Raycer/ProcTest-v0` | procedural `medium`, split test | 1 | 4000 |
+| `proc-train-dr-v0` | `Raycer/ProcTrainDR-v0` | procedural `medium`, split train, appearance randomized | 1 | 4000 |
+| `proc-test-dr-v0` | `Raycer/ProcTestDR-v0` | procedural `medium`, split test, appearance randomized | 1 | 4000 |
 | `time-trial-v0` | `Raycer/TimeTrial-v0` | builtin `oval`, `w_time = 0.05` | 3 | 9000 |
 
 Every ID also exists as a `-Continuous-v0` variant with the continuous action space, for example

@@ -170,7 +170,7 @@ def test_lap_terminates_API10() -> None:
 
 
 def test_registration_API12_API13() -> None:
-    assert len(IDS) == 12
+    assert len(IDS) == 16
     for env_id in IDS:
         spec = gymnasium.spec(env_id)
         assert spec.entry_point == "raycer.env:RaycerEnv"
@@ -335,3 +335,71 @@ def test_make_vec_API16() -> None:
     envs.step(envs.action_space.sample())
     envs.close()
     assert raycer.RaycerEnv is RaycerEnv
+
+
+APPEARANCE_KEYS = {
+    "hue_offset_deg",
+    "brightness",
+    "saturation",
+    "sky_hue_deg",
+    "swap_left",
+    "swap_right",
+    "swap_obstacle",
+    "swap_road",
+    "swap_finish",
+    "period_scale",
+    "skyline_phase",
+}
+
+
+@pytest.mark.parametrize("split", ["train", "test"])
+def test_dr_keeps_depth_labels_and_tracks_API21(split: str) -> None:
+    kwargs: dict[str, Any] = {"depth": True, "labels": True}
+    dr, plain = (
+        _env(scenario=f"proc-{split}-dr-v0", **kwargs),
+        _env(scenario=f"proc-{split}-v0", **kwargs),
+    )
+    actions = np.random.default_rng(0).integers(9, size=50)
+    for seed in (0, 1, 2):
+        (obs_a, info_a), (obs_b, info_b) = dr.reset(seed=seed), plain.reset(seed=seed)
+        rgb_differs = False
+        for a in [None, *actions]:
+            if a is not None:
+                obs_a, *_, info_a = dr.step(int(a))
+                obs_b, *_, info_b = plain.step(int(a))
+            assert np.array_equal(obs_a["depth"], obs_b["depth"])
+            assert np.array_equal(obs_a["labels"], obs_b["labels"])
+            assert info_a["track_seed"] == info_b["track_seed"]
+            rgb_differs |= not np.array_equal(obs_a["screen"], obs_b["screen"])
+            # REND-06 point 6 under DR: sky-labelled pixels only show sky colours.
+            sky = dr.game._renderer.sky_colors
+            px = obs_a["screen"][obs_a["labels"][..., 0] == 0]
+            assert np.all((px[:, None, :] == sky[None]).all(axis=2).any(axis=1))
+        assert rgb_differs
+
+
+def test_dr_determinism_API21() -> None:
+    a, b = _env(scenario="proc-test-dr-v0"), _env(scenario="proc-test-dr-v0")
+    obs_a, obs_b = a.reset(seed=5)[0], b.reset(seed=5)[0]
+    assert obs_a["screen"].tobytes() == obs_b["screen"].tobytes()
+    for action in np.random.default_rng(1).integers(9, size=20):
+        obs_a = a.step(int(action))[0]
+        obs_b = b.step(int(action))[0]
+        assert obs_a["screen"].tobytes() == obs_b["screen"].tobytes()
+
+
+@pytest.mark.parametrize("scenario", ["proc-train-dr-v0", "proc-test-dr-v0"])
+def test_dr_info_appearance_API21(scenario: str) -> None:
+    env = _env(scenario=scenario)
+    infos = [env.reset(seed=0)[1], env.step(0)[4]]
+    for info in infos:
+        assert set(info["appearance"]) == APPEARANCE_KEYS
+        assert all(type(v) is float for v in info["appearance"].values())
+    oval = _env()
+    assert "appearance" not in oval.reset(seed=0)[1]
+    assert "appearance" not in oval.step(0)[4]
+
+
+def test_dr_gym_make_API22() -> None:
+    env = gymnasium.make("Raycer/ProcTestDR-Continuous-v0", width=64, height=48)
+    assert "appearance" in env.reset(seed=0)[1]

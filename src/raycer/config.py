@@ -22,6 +22,7 @@ _SCHEMA: dict[str, Any] = {
     "buffers": {"screen": True, "depth": False, "labels": False},
     "physics": {"frame_skip": 4},
     "reward": {k.removeprefix("w_"): v for k, v in _DEFAULT_WEIGHTS.items()},
+    "appearance": {"randomize": False, "split": "train", "strength": 1.0},
 }
 _BUILTINS = ("oval", "kidney", "technical")
 
@@ -36,6 +37,12 @@ def list_scenarios() -> list[str]:
     return sorted(
         p.name.removesuffix(".toml") for p in _scenarios_dir().iterdir() if p.name.endswith(".toml")
     )
+
+
+def gym_name(scenario: str) -> str:
+    """Return the CamelCase Gym ID stem of a scenario, e.g. "ProcTrainDR" for "proc-train-dr-v0"."""
+    parts = scenario.removesuffix("-v0").split("-")
+    return "".join("DR" if p == "dr" else p.capitalize() for p in parts)
 
 
 def _check_keys(data: Mapping[str, Any], source: str) -> None:

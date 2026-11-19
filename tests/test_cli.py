@@ -72,7 +72,7 @@ def test_render_sample(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> No
 def test_list(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["list"]) == 0
     lines = capsys.readouterr().out.splitlines()
-    assert len(lines) == 6
+    assert len(lines) == 8
     assert any(
         "proc-train-v0" in line
         and "Raycer/ProcTrain-v0" in line
@@ -80,6 +80,8 @@ def test_list(capsys: pytest.CaptureFixture[str]) -> None:
         for line in lines
     )
     assert any("Raycer/TimeTrial-v0" in line for line in lines)
+    assert "proc-train-dr-v0  Raycer/ProcTrainDR-v0  Raycer/ProcTrainDR-Continuous-v0" in lines
+    assert "proc-test-dr-v0  Raycer/ProcTestDR-v0  Raycer/ProcTestDR-Continuous-v0" in lines
 
 
 @pytest.mark.parametrize(

@@ -42,3 +42,48 @@ def test_label_colors() -> None:
     ]
     assert [tuple(int(v) for v in row) for row in colors] == expected
     assert len(np.unique(colors, axis=0)) == 6
+
+
+def test_draw_appearance_ranges_API21() -> None:
+    for seed in range(1000):
+        train = palette.draw_appearance(seed, "train", 1.0)
+        test = palette.draw_appearance(seed, "test", 1.0)
+        assert 0.0 <= train["hue_offset_deg"] < 270.0
+        assert 270.0 <= test["hue_offset_deg"] < 360.0
+        for p in (train, test):
+            assert 0.7 <= p["brightness"] <= 1.3
+            assert 0.5 <= p["saturation"] <= 1.2
+            assert 0.75 <= p["period_scale"] <= 1.5
+
+
+def test_draw_appearance_determinism_and_strength_API21() -> None:
+    p = palette.draw_appearance(3, "train", 0.7)
+    assert p == palette.draw_appearance(3, "train", 0.7)
+    assert p != palette.draw_appearance(4, "train", 0.7)
+    assert len(p) == 11
+    assert all(type(v) is float for v in p.values())
+    zero = palette.draw_appearance(3, "test", 0.0)
+    swaps = {f"swap_{m}": 0.0 for m in ("left", "right", "obstacle", "road", "finish")}
+    assert zero == {
+        "hue_offset_deg": 0.0,
+        "brightness": 1.0,
+        "saturation": 1.0,
+        "sky_hue_deg": 0.0,
+        **swaps,
+        "period_scale": 1.0,
+        "skyline_phase": 0.0,
+    }
+
+
+def test_appearance_colors_API21() -> None:
+    assert palette.appearance_colors(None)["LEFT_A"] == palette.LEFT_A
+    params = dict(palette.draw_appearance(0, "train", 0.0), swap_left=1.0)
+    colors = palette.appearance_colors(params)
+    assert (colors["LEFT_A"], colors["LEFT_B"]) == (palette.LEFT_B, palette.LEFT_A)
+    assert colors["ROAD_A"] == palette.ROAD_A
+    params = dict(params, swap_left=0.0, hue_offset_deg=120.0, sky_hue_deg=30.0)
+    colors = palette.appearance_colors(params)
+    assert colors["LEFT_A"] == (40, 200, 40)  # red rotated by 120 degrees is green
+    assert colors["FOG"] == colors["SKY_HORIZON"] != palette.SKY_HORIZON
+    assert palette.LEFT_A == (200, 40, 40)
+    assert palette.LABEL_COLORS[2].tolist() == [200, 40, 40]

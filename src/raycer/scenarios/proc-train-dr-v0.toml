@@ -1,0 +1,13 @@
+name = "proc-train-dr"
+version = 0
+laps = 1
+max_episode_steps = 4000
+
+[track]
+type = "procedural"
+preset = "medium"
+split = "train"
+
+[appearance]
+randomize = true
+split = "train"
