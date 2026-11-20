@@ -18,7 +18,7 @@ from gymnasium.utils.passive_env_checker import env_render_passive_checker
 from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 
 import raycer
-from raycer import LABEL_PALETTE, Game, RaycerEnv
+from raycer import LABEL_PALETTE, Game, RaycerEnv, physics
 from raycer.track import SPLITS
 
 P = inspect.Parameter
@@ -33,6 +33,7 @@ INFO_KEYS = {
     "wrong_way_steps",
     "lap_times",
     "is_success",
+    "pose",
 }
 BUFFERS = list(itertools.product([False, True], repeat=3))
 IDS = [i for i in gymnasium.registry if i.startswith("Raycer/")]
@@ -461,3 +462,21 @@ def test_depth_noise_kwarg_API24() -> None:
         assert not np.array_equal(obs_a["depth"], obs_b["depth"])
         assert not np.array_equal(info_a["depth_m"], info_b["depth_m"])
         assert np.array_equal(obs_a["depth"], obs_t["depth"])
+
+
+def test_info_pose_API25() -> None:
+    env = _env()
+    _, info = env.reset(seed=0)
+    poses = [info["pose"]]
+    assert info["pose"] == env.game.get_pose()
+    start = physics.start_state(env.game.get_track())
+    assert info["pose"] == (start.x, start.y, start.heading)
+    for _ in range(5):
+        info = env.step(1)[4]
+        assert info["pose"] == env.game.get_pose()
+        poses.append(info["pose"])
+    for pose in poses:
+        assert type(pose) is tuple
+        assert len(pose) == 3
+        assert all(type(v) is float for v in pose)
+    assert poses[-1][:2] != poses[0][:2]

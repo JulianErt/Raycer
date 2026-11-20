@@ -64,6 +64,7 @@ def test_file_content(tmp_path: Path, action_type: str) -> None:
         assert set(data.files) == {
             "screen",
             "gamevariables",
+            "pose",
             "actions",
             "rewards",
             "terminated",
@@ -169,3 +170,19 @@ def test_creates_directory(tmp_path: Path) -> None:
     target = tmp_path / "a" / "b"
     RecordEpisode(_env(), target)
     assert target.is_dir()
+
+
+def test_pose_API25(tmp_path: Path) -> None:
+    env = RecordEpisode(_env(), tmp_path)
+    _, info = env.reset(seed=0)
+    poses = [info["pose"]]
+    done = False
+    while not done:
+        _, _, term, trunc, info = env.step(1)
+        poses.append(info["pose"])
+        done = term or trunc
+    assert env.last_path is not None
+    ep = load_episode(env.last_path)
+    assert ep["pose"].dtype == np.float64
+    assert ep["pose"].shape == (len(ep["actions"]) + 1, 3)
+    assert ep["pose"].tolist() == [list(p) for p in poses]

@@ -41,6 +41,7 @@ SIGNATURES: dict[str, list[tuple[str, inspect._ParameterKind, object]]] = {
     "is_episode_finished": [],
     "is_episode_timeout_reached": [],
     "get_episode_time": [],
+    "get_pose": [],
     "get_total_reward": [],
     "get_last_reward_components": [],
     "get_label_names": [],
@@ -428,3 +429,17 @@ def test_depth_noise_isolation_API24() -> None:
         assert ra == rb
         assert ca == cb
         assert not np.array_equal(noisy.depth_buffer, clean.depth_buffer)
+
+
+def test_get_pose_API25() -> None:
+    with pytest.raises(RuntimeError, match="get_pose must be called after init"):
+        Game().get_pose()
+    game = _game(set_episode_timeout=1)
+    game.make_action(1)
+    assert game.is_episode_finished()
+    pose = game.get_pose()
+    assert isinstance(pose, tuple)
+    assert len(pose) == 3
+    game.close()
+    with pytest.raises(RuntimeError):
+        game.get_pose()

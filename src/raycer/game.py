@@ -357,6 +357,12 @@ class Game:
         """Return the number of env steps since new_episode."""
         return self._steps
 
+    def get_pose(self) -> tuple[float, float, float]:
+        """Return the car pose (x, y, heading) in metres and radians, track coordinates."""
+        if not self._initialized:
+            raise RuntimeError("get_pose must be called after init()")
+        return float(self._car.x), float(self._car.y), float(self._car.heading)
+
     def get_total_reward(self) -> float:
         """Return the summed reward of the current episode."""
         return self._total_reward

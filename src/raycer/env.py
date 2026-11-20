@@ -225,6 +225,7 @@ class RaycerEnv(gym.Env[Obs, Any]):
             "wrong_way_steps": self._wrong_way_steps,
             "lap_times": list(self._lap_times),
             "is_success": p.lap >= self._laps,
+            "pose": self.game.get_pose(),
         }
         if self._metric_depth_info:
             assert state.depth_buffer is not None
