@@ -13,22 +13,34 @@ from raycer.recording import load_episode
 from raycer.wrappers import StackChannels
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
-FILES = ["random_agent", "low_level_api", "heuristic_driver", "record_demo", "ppo_rgb_vs_depth"]
+FILES = [
+    "random_agent",
+    "low_level_api",
+    "heuristic_driver",
+    "record_demo",
+    "ppo_rgb_vs_depth",
+    "trajectories",
+]
+SLOW = ("ppo_rgb_vs_depth", "trajectories")
 
 
 @pytest.mark.parametrize(
     "name",
-    [
-        pytest.param(n, marks=pytest.mark.timeout(300)) if n == "ppo_rgb_vs_depth" else n
-        for n in FILES
-    ],
+    [pytest.param(n, marks=pytest.mark.timeout(300)) if n in SLOW else n for n in FILES],
 )
 def test_example_smoke_DOC03(name: str, tmp_path: Path) -> None:
-    if name == "ppo_rgb_vs_depth":
+    if name in SLOW:
         pytest.importorskip("stable_baselines3")
+    if name == "trajectories":
+        pytest.importorskip("matplotlib")
     env = {**os.environ, "SDL_VIDEODRIVER": "dummy"}
     cmd = [sys.executable, str(EXAMPLES / f"{name}.py"), "--steps", "50"]
+    if name == "trajectories":
+        cmd += ["--train-steps", "64"]
     assert subprocess.run(cmd, cwd=tmp_path, env=env).returncode == 0
+    if name == "trajectories":
+        assert (tmp_path / "runs" / "trajectories.png").exists()
+        assert (tmp_path / "runs" / "trajectories.gif").exists()
     if name == "ppo_rgb_vs_depth":
         assert list((tmp_path / "runs").glob("*.csv"))
     if name == "record_demo":

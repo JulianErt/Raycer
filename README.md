@@ -23,7 +23,7 @@ uv add "raycer[human] @ git+https://github.com/JulianErt/Raycer"   # optional: p
 The `human` extra is needed only for `raycer play` and `render_mode="human"`.
 
 Raycer needs Python 3.12 or newer. The only runtime dependencies are numpy and gymnasium; pygame
-is pulled in only by the `human` extra.
+is pulled in only by the `human` extra and matplotlib only by the `plot` extra.
 
 ## Quickstart
 
@@ -198,6 +198,15 @@ An optional sensor noise model makes the depth buffer look like a real range sen
 Gaussian noise, quantization to `quant` metres and per-pixel dropout to the maximum view
 distance, drawn deterministically from the episode seed and step. Only depth changes; RGB,
 labels, physics and reward stay bit-identical.
+
+## Trajectories
+
+![Trajectories of four PPO checkpoints on a ProcTest track](docs/img/trajectories.gif)
+
+`raycer.trajectory` (`plot` extra) draws the `info["pose"]` paths of several runs on one track
+as a PNG/PDF plot with `plot_trajectories` or as a GIF with `animate_trajectories`;
+`examples/trajectories.py` does this for a folder of PPO checkpoints. See
+[docs/trajectories.md](docs/trajectories.md).
 
 ## For ViZDoom users
 
