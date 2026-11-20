@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `Game.get_pose()` returns the car pose `(x, y, heading)`; it is also in `info["pose"]` and
+  recorded by `RecordEpisode` as the `pose` array (API-25).
+
 ## [0.3.0] - 2026-11-20
 
 ### Added

@@ -21,6 +21,7 @@ For an episode with T steps:
 | --- | --- |
 | `screen`, `depth`, `labels` | Observations, length T+1, only the active buffers |
 | `gamevariables` | `float32 (T+1, 8)` |
+| `pose` | `float64 (T+1, 3)`: car `x`, `y`, `heading` per observation |
 | `actions` | `int64 (T,)` discrete or `float32 (T, 2)` continuous |
 | `rewards` | `float32 (T,)` |
 | `terminated`, `truncated` | `bool (T,)` |
