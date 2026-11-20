@@ -28,6 +28,7 @@ Configure before `init()`; setters called after `init()` raise `RuntimeError`.
 | `is_episode_finished()` | Target laps or timeout reached |
 | `is_episode_timeout_reached()` | Positive timeout reached |
 | `get_episode_time()` | Env steps since `new_episode` |
+| `get_pose()` | Car pose `(x, y, heading)` as floats in metres and radians, world coordinates of `get_track()` |
 | `get_total_reward()` | Summed reward of the episode |
 | `get_last_reward_components()` | Weighted reward terms of the last step |
 | `get_label_names()` | Label ID to name table; works before `init()` |
@@ -86,6 +87,7 @@ RaycerEnv(scenario="oval-v0", *, config_path=None, render_mode=None,
 | `wrong_way_steps` | Cumulative steps driving the wrong way |
 | `lap_times` | List of lap times in seconds |
 | `is_success` | True once all target laps are done |
+| `pose` | Car pose `(x, y, heading)` as floats in metres and radians, world coordinates of `get_track()` |
 | `appearance` | Only with appearance randomization on: dict of the drawn appearance parameters |
 | `depth_m` | Only with `metric_depth_info=True`: `float32 (H, W)` depth in metres |
 

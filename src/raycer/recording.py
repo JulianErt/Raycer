@@ -31,6 +31,7 @@ class RecordEpisode(gym.Wrapper[Obs, Any, Obs, Any]):
         self.last_path: Path | None = None
         self._seed: int | None = None
         self._obs: list[Obs] = []
+        self._poses: list[tuple[float, float, float]] = []
         self._actions: list[Any] = []
         self._rewards: list[float] = []
         self._terminated: list[bool] = []
@@ -46,6 +47,7 @@ class RecordEpisode(gym.Wrapper[Obs, Any, Obs, Any]):
         obs, info = self.env.reset(seed=seed, options=options)
         self._seed = seed
         self._obs = [obs]
+        self._poses = [info["pose"]]
         self._actions, self._rewards, self._terminated, self._truncated = [], [], [], []
         self._info = info
         self._written = False
@@ -55,6 +57,7 @@ class RecordEpisode(gym.Wrapper[Obs, Any, Obs, Any]):
         """Step the env, append the transition and write the file when the episode ends."""
         obs, reward, terminated, truncated, info = self.env.step(action)
         self._obs.append(obs)
+        self._poses.append(info["pose"])
         self._actions.append(action)
         self._rewards.append(float(reward))
         self._terminated.append(terminated)
@@ -93,6 +96,7 @@ class RecordEpisode(gym.Wrapper[Obs, Any, Obs, Any]):
         arrays: dict[str, Any] = {
             k: np.stack([o[k] for o in self._obs]) for k in _KEYS if k in self._obs[0]
         }
+        arrays["pose"] = np.array(self._poses, np.float64)
         arrays["actions"] = np.array(self._actions, np.int64 if discrete else np.float32)
         arrays["rewards"] = np.array(self._rewards, np.float32)
         arrays["terminated"] = np.array(self._terminated, bool)
