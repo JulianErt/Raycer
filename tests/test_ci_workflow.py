@@ -201,7 +201,7 @@ def test_triggers(workflow: dict[str, Any]) -> None:
 def test_matrix_os(workflow: dict[str, Any]) -> None:
     check = workflow["jobs"]["check"]
     assert check["runs-on"] == "${{ matrix.os }}"
-    assert set(check["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "macos-14", "windows-latest"}
+    assert set(check["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "macos-latest", "windows-latest"}
 
 
 def test_python_version(workflow: dict[str, Any]) -> None:
