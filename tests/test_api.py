@@ -25,6 +25,12 @@ SIGNATURES: dict[str, list[tuple[str, inspect._ParameterKind, object]]] = {
         ("split", _POS, "train"),
         ("strength", _POS, 1.0),
     ],
+    "set_depth_noise": [
+        ("enabled", _POS, P.empty),
+        ("sigma_rel", _POS, 0.02),
+        ("dropout", _POS, 0.01),
+        ("quant", _POS, 0.05),
+    ],
     "set_reward_config": [("weights", P.VAR_KEYWORD, P.empty)],
     "set_seed": [("seed", _POS, P.empty)],
     "init": [],
@@ -51,6 +57,7 @@ SETTERS = {
     "set_episode_timeout": (10,),
     "set_frame_skip": (2,),
     "set_appearance": (True,),
+    "set_depth_noise": (True,),
 }
 
 
@@ -170,7 +177,7 @@ def test_discrete_matches_continuous() -> None:
             assert a.make_action(i) == b.make_action(DISCRETE_ACTIONS[i])
             sa, sb = _state(a), _state(b)
             assert np.array_equal(sa.game_variables, sb.game_variables)
-            assert np.array_equal(sa.screen_buffer, sb.screen_buffer)  # type: ignore[arg-type]
+            assert np.array_equal(sa.screen_buffer, sb.screen_buffer)
     with pytest.raises(ValueError, match="in 0"):
         _game().make_action(9)
     with pytest.raises(ValueError, match="steer"):
@@ -310,3 +317,114 @@ def test_set_appearance_load_config_API21(tmp_path: Path) -> None:
     game.set_seed(5)
     game.init()
     assert game._appearance == palette.draw_appearance(5, "test", 1.0)
+
+
+def test_set_depth_noise_validation_API24() -> None:
+    for kwargs, name in (({"sigma_rel": -0.1}, "sigma_rel"), ({"dropout": 1.5}, "dropout")):
+        with pytest.raises(ValueError, match=name):
+            Game().set_depth_noise(True, **kwargs)
+    for quant in (0.0, -0.05):
+        with pytest.raises(ValueError, match="quant"):
+            Game().set_depth_noise(True, quant=quant)
+    Game().set_depth_noise(True, sigma_rel=0.0, dropout=0.0)
+    Game().set_depth_noise(True, dropout=1.0)
+
+
+def test_set_depth_noise_load_config_API24(tmp_path: Path) -> None:
+    path = tmp_path / "noise.toml"
+    path.write_text("[depth_noise]\nenabled = true\nquant = 0.1\n", encoding="utf-8")
+    game = Game()
+    assert game._depth_noise == (False, 0.02, 0.01, 0.05)
+    game.load_config(path)
+    assert game._depth_noise == (True, 0.02, 0.01, 0.1)
+    path.write_text("[depth_noise]\ndropout = 2.0\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="dropout"):
+        Game().load_config(path)
+
+
+Frame = tuple[GameState, GameState, float, float, dict[str, float], dict[str, float]]
+
+
+def _noise_pair(seed: int = 0, steps: int = 20, **noise: float) -> list[Frame]:
+    """Per-frame (noisy, clean) states, rewards and components on technical-v0 at 96x72."""
+    games = []
+    for enabled in (True, False):
+        game = Game()
+        game.set_scenario("technical-v0")
+        game.set_depth_buffer_enabled(True)
+        game.set_labels_buffer_enabled(True)
+        game.set_depth_noise(enabled, **noise)
+        game.init()
+        game.new_episode(seed)
+        games.append(game)
+    noisy, clean = games
+    frames = [(_state(noisy), _state(clean), 0.0, 0.0, {}, {})]
+    for a in np.random.default_rng(seed).integers(len(DISCRETE_ACTIONS), size=steps):
+        ra, rb = noisy.make_action(int(a)), clean.make_action(int(a))
+        frames.append(
+            (
+                _state(noisy),
+                _state(clean),
+                ra,
+                rb,
+                noisy.get_last_reward_components(),
+                clean.get_last_reward_components(),
+            )
+        )
+    return frames
+
+
+def _near(frames: list[Frame]) -> tuple[np.ndarray, np.ndarray]:
+    """Noisy and true depth of all pixels whose true depth is below 0.8 * max_view_distance."""
+    noisy = np.stack([f[0].depth_buffer for f in frames])
+    clean = np.stack([f[1].depth_buffer for f in frames])
+    mask = clean < 0.8 * 60.0
+    return noisy[mask].astype(np.float64), clean[mask].astype(np.float64)
+
+
+def test_depth_noise_relative_error_API24() -> None:
+    noisy, clean = _near(_noise_pair(sigma_rel=0.05, quant=0.001, dropout=0.0))
+    rel = (noisy - clean) / clean
+    assert abs(np.sqrt(np.mean(rel**2)) - 0.05) <= 0.005
+    assert abs(rel.mean()) < 0.005
+
+
+def test_depth_noise_dropout_rate_API24() -> None:
+    noisy, _ = _near(_noise_pair(sigma_rel=0.0, quant=0.001, dropout=0.05))
+    assert abs(np.mean(noisy == 60.0) - 0.05) <= 0.01
+    noisy, _ = _near(_noise_pair(sigma_rel=0.0, quant=0.001, dropout=0.0))
+    assert not np.any(noisy == 60.0)
+
+
+def test_depth_noise_quantized_and_valid_API24() -> None:
+    for noisy, *_ in _noise_pair():
+        depth = noisy.depth_buffer
+        assert depth is not None
+        assert depth.dtype == np.float32
+        assert np.all(np.isfinite(depth))
+        assert depth.min() >= 0.05
+        assert depth.max() <= 60.0
+        q = depth.astype(np.float64) / 0.05
+        assert np.allclose(q, np.round(q), rtol=0, atol=1e-4 / 0.05)
+
+
+def test_depth_noise_determinism_API24() -> None:
+    a, b = _noise_pair(seed=3), _noise_pair(seed=3)
+    for fa, fb in zip(a, b, strict=True):
+        assert np.array_equal(fa[0].depth_buffer, fb[0].depth_buffer)
+    other = _noise_pair(seed=4)
+    assert not np.array_equal(a[0][0].depth_buffer, other[0][0].depth_buffer)
+    game = _game(buffers=(True, True, False), set_depth_noise=True)
+    game.make_action(0)
+    assert np.array_equal(_state(game).depth_buffer, _state(game).depth_buffer)
+
+
+def test_depth_noise_isolation_API24() -> None:
+    for noisy, clean, ra, rb, ca, cb in _noise_pair(steps=40):
+        assert np.array_equal(noisy.screen_buffer, clean.screen_buffer)
+        assert np.array_equal(noisy.labels_buffer, clean.labels_buffer)
+        assert np.array_equal(noisy.game_variables, clean.game_variables)
+        assert noisy.number == clean.number
+        assert ra == rb
+        assert ca == cb
+        assert not np.array_equal(noisy.depth_buffer, clean.depth_buffer)

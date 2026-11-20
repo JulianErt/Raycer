@@ -60,6 +60,7 @@ def test_signature_API03() -> None:
         ("reward", kw, None),
         ("metric_depth_info", kw, False),
         ("num_tracks", kw, None),
+        ("depth_noise", kw, None),
     ]
     assert [(p.name, p.kind, p.default) for p in params] == expected
     assert RaycerEnv.metadata == {"render_modes": ["rgb_array", "human"], "render_fps": 30}
@@ -437,3 +438,26 @@ def test_dr_info_appearance_API21(scenario: str) -> None:
 def test_dr_gym_make_API22() -> None:
     env = gymnasium.make("Raycer/ProcTestDR-Continuous-v0", width=64, height=48)
     assert "appearance" in env.reset(seed=0)[1]
+
+
+def test_depth_noise_kwarg_API24() -> None:
+    kwargs: dict[str, Any] = {"depth": True, "labels": True, "metric_depth_info": True}
+    noisy, twin, plain = (
+        RaycerEnv("oval-v0", depth_noise=True, **kwargs),
+        RaycerEnv("oval-v0", depth_noise=True, **kwargs),
+        RaycerEnv("oval-v0", **kwargs),
+    )
+    assert noisy.game._depth_noise[0]
+    assert not plain.game._depth_noise[0]
+    (obs_a, info_a), (obs_t, _), (obs_b, info_b) = (e.reset(seed=0) for e in (noisy, twin, plain))
+    for a in [None, *np.random.default_rng(0).integers(9, size=20)]:
+        if a is not None:
+            obs_a, r_a, *_, info_a = noisy.step(int(a))
+            obs_t, r_t, *_ = twin.step(int(a))
+            obs_b, r_b, *_, info_b = plain.step(int(a))
+            assert r_a == r_b == r_t
+        for key in ("screen", "labels", "gamevariables"):
+            assert np.array_equal(obs_a[key], obs_b[key])
+        assert not np.array_equal(obs_a["depth"], obs_b["depth"])
+        assert not np.array_equal(info_a["depth_m"], info_b["depth_m"])
+        assert np.array_equal(obs_a["depth"], obs_t["depth"])

@@ -75,3 +75,24 @@ def test_perf01_with_appearance_randomization_API21() -> None:
         if game.is_episode_finished():
             game.new_episode()
     assert len(actions) / elapsed >= 1000
+
+
+# Meant to run with OMP_NUM_THREADS=1, like the PERF-01 test above.
+@pytest.mark.slow
+def test_perf01_with_depth_noise_API24() -> None:
+    game = Game()
+    game.set_scenario("technical-v0")
+    game.set_depth_buffer_enabled(True)
+    game.set_labels_buffer_enabled(True)
+    game.set_frame_skip(4)
+    game.set_depth_noise(True)
+    game.init()
+    actions = np.random.default_rng(0).integers(len(DISCRETE_ACTIONS), size=2000)
+    elapsed = 0.0
+    for a in actions:
+        t0 = time.perf_counter()
+        game.make_action(int(a))
+        elapsed += time.perf_counter() - t0
+        if game.is_episode_finished():
+            game.new_episode()
+    assert len(actions) / elapsed >= 1000

@@ -43,6 +43,12 @@ lap = 10.0
 randomize = false
 split = "train"               # "train" or "test" hue range
 strength = 1.0                # 0 to 1
+
+[depth_noise]                 # noisy depth sensor, only depth changes
+enabled = false
+sigma_rel = 0.02              # relative Gaussian noise
+dropout = 0.01                # per-pixel probability of max view distance
+quant = 0.05                  # quantization step in metres, > 0
 ```
 
 Unknown keys raise `ValueError` naming the file and the key.

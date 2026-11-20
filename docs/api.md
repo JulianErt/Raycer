@@ -9,7 +9,7 @@ Configure before `init()`; setters called after `init()` raise `RuntimeError`.
 
 | Method | Description |
 | --- | --- |
-| `load_config(path)` | Apply the `screen`, `buffers`, `physics.frame_skip`, `max_episode_steps`, `laps` and `reward` keys of a TOML file |
+| `load_config(path)` | Apply the `screen`, `buffers`, `physics.frame_skip`, `max_episode_steps`, `laps` `reward` and `depth_noise` keys of a TOML file |
 | `set_scenario(name)` | Select a builtin-track scenario: `oval-v0`, `kidney-v0`, `technical-v0` or `time-trial-v0` |
 | `set_screen_resolution(width, height)` | Buffer size, default 96x72 |
 | `set_screen_buffer_enabled(bool)` | RGB buffer, on by default |
@@ -19,6 +19,7 @@ Configure before `init()`; setters called after `init()` raise `RuntimeError`.
 | `set_frame_skip(n)` | Physics ticks (1/60 s) per env step, 1 to 16, default 4 |
 | `set_reward_config(**weights)` | Override reward weights (`w_progress`, `w_time`, `w_collision`, `w_wrongway`, `w_lap`); applies from the next episode |
 | `set_appearance(randomize, split="train", strength=1.0)` | Per-episode appearance randomization; `split` is `"train"` or `"test"`, `strength` 0 to 1 |
+| `set_depth_noise(enabled, sigma_rel=0.02, dropout=0.01, quant=0.05)` | Noisy depth sensor: relative Gaussian noise, quantization in metres and per-pixel dropout to the view distance; only depth changes |
 | `set_seed(seed)` | Seed used from the next episode |
 | `init()` | Freeze the configuration and start the first episode |
 | `new_episode(seed=None)` | Reset car, progress and reward |
@@ -51,7 +52,8 @@ A frozen dataclass with copies of the buffers:
 RaycerEnv(scenario="oval-v0", *, config_path=None, render_mode=None,
           action_type="discrete", screen=True, depth=False, labels=False,
           width=96, height=72, frame_skip=4, max_episode_steps=None,
-          reward=None, metric_depth_info=False, num_tracks=None)
+          reward=None, metric_depth_info=False, num_tracks=None,
+          depth_noise=None)
 ```
 
 - `scenario` is any name from `raycer.list_scenarios()`, including procedural ones.
@@ -63,6 +65,8 @@ RaycerEnv(scenario="oval-v0", *, config_path=None, render_mode=None,
 - `metric_depth_info=True` adds the metric depth as `info["depth_m"]`; it needs `depth=True`.
 - `num_tracks=N` limits a procedural scenario to the first N track seeds of its split (like
   Procgen's `num_levels`); it overrides `[track] num_tracks` and is invalid for builtin tracks.
+- `depth_noise=True` turns on the noisy depth sensor with the `[depth_noise]` parameters; it
+  overrides `[depth_noise] enabled` and only changes `obs["depth"]` and `info["depth_m"]`.
 - `reset(seed=..., options={"track_seed": k})` pins the track of a procedural scenario.
 - `env.game` is the underlying `Game`.
 

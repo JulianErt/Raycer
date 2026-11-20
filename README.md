@@ -183,6 +183,13 @@ obs, info = env.reset(seed=0)
 print(info["appearance"]["hue_offset_deg"])
 ```
 
+An optional sensor noise model makes the depth buffer look like a real range sensor. The
+`[depth_noise]` table (`enabled = false`, `sigma_rel = 0.02`, `dropout = 0.01`, `quant = 0.05`),
+`Game.set_depth_noise(enabled, ...)` or `RaycerEnv(..., depth_noise=True)` turn it on: relative
+Gaussian noise, quantization to `quant` metres and per-pixel dropout to the maximum view
+distance, drawn deterministically from the episode seed and step. Only depth changes; RGB,
+labels, physics and reward stay bit-identical.
+
 ## For ViZDoom users
 
 | ViZDoom | Raycer |

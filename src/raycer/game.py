@@ -3,7 +3,7 @@
 import os
 import tomllib
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from numpy.typing import NDArray
@@ -86,6 +86,7 @@ class Game:
         self._seed = 0
         self._appearance_cfg: tuple[bool, str, float] = (False, "train", 1.0)
         self._appearance: dict[str, float] | None = None
+        self._depth_noise: tuple[bool, float, float, float] = (False, 0.02, 0.01, 0.05)
         self._pending_weights = dict(_DEFAULT_WEIGHTS)
         self._weights = dict(_DEFAULT_WEIGHTS)
         self._params = CarParams()
@@ -129,6 +130,14 @@ class Game:
                 app.get("randomize", randomize),
                 app.get("split", split),
                 app.get("strength", strength),
+            )
+        if "depth_noise" in cfg:
+            dn, (enabled, sigma_rel, dropout, quant) = cfg["depth_noise"], self._depth_noise
+            self.set_depth_noise(
+                dn.get("enabled", enabled),
+                dn.get("sigma_rel", sigma_rel),
+                dn.get("dropout", dropout),
+                dn.get("quant", quant),
             )
 
     def set_scenario(self, name: str) -> None:
@@ -181,6 +190,19 @@ class Game:
         if not 0.0 <= strength <= 1.0:
             raise ValueError(f"appearance strength must be in [0, 1], got {strength}")
         self._appearance_cfg = (randomize, split, strength)
+
+    def set_depth_noise(
+        self, enabled: bool, sigma_rel: float = 0.02, dropout: float = 0.01, quant: float = 0.05
+    ) -> None:
+        """Enable the noisy depth sensor model (API-24) with its parameters."""
+        self._check_not_initialized("set_depth_noise")
+        if not sigma_rel >= 0:
+            raise ValueError(f"depth_noise sigma_rel must be >= 0, got {sigma_rel}")
+        if not 0 <= dropout <= 1:
+            raise ValueError(f"depth_noise dropout must be in [0, 1], got {dropout}")
+        if not quant > 0:
+            raise ValueError(f"depth_noise quant must be > 0, got {quant}")
+        self._depth_noise = (enabled, sigma_rel, dropout, quant)
 
     def set_reward_config(self, **weights: float) -> None:
         """Override reward weights (API-09 keys); they apply from the next episode."""
@@ -240,6 +262,7 @@ class Game:
             self._appearance = palette.draw_appearance(self._seed, split, strength)
             self._renderer.set_appearance(self._appearance)
         self._output: RenderOutput = self._renderer.render(self._track, self._car)
+        self._apply_depth_noise(0)
 
     def make_action(self, action: int | Sequence[float]) -> float:
         """Apply an action for frame_skip ticks and return the summed reward."""
@@ -274,10 +297,24 @@ class Game:
             self._step_collided |= collided
         self._output = self._renderer.render(self._track, self._car)
         self._steps += 1
+        self._apply_depth_noise(self._steps)
         self._components = comps
         reward = sum(comps.values())
         self._total_reward += reward
         return reward
+
+    def _apply_depth_noise(self, step: int) -> None:
+        """Replace the rendered depth by its noisy sensor reading (API-24) if enabled."""
+        enabled, sigma_rel, dropout, quant = self._depth_noise
+        depth = self._output.depth
+        if not enabled or depth is None:
+            return
+        rng = np.random.Generator(np.random.PCG64([self._seed, 0xD3F, step]))
+        far = self._renderer.max_view_distance
+        d = depth + sigma_rel * depth * rng.standard_normal(depth.shape)
+        d = np.clip(np.round(d / quant) * quant, 0.05, far)
+        d[rng.random(depth.shape) < dropout] = far
+        self._output = replace(self._output, depth=d.astype(np.float32))
 
     def get_state(self) -> GameState | None:
         """Return a copy of the current state, or None if no episode is running."""

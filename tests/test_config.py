@@ -206,3 +206,15 @@ def test_appearance_default_API21() -> None:
         "split": "train",
         "strength": 1.0,
     }
+
+
+def test_depth_noise_default_API24() -> None:
+    for scenario in list_scenarios():
+        assert load_config(scenario)["depth_noise"] == {
+            "enabled": False,
+            "sigma_rel": 0.02,
+            "dropout": 0.01,
+            "quant": 0.05,
+        }
+    with pytest.raises(ValueError, match=r"depth_noise\.sigma"):
+        load_config("oval-v0", overrides={"depth_noise": {"sigma": 0.1}})

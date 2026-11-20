@@ -23,6 +23,7 @@ _SCHEMA: dict[str, Any] = {
     "physics": {"frame_skip": 4},
     "reward": {k.removeprefix("w_"): v for k, v in _DEFAULT_WEIGHTS.items()},
     "appearance": {"randomize": False, "split": "train", "strength": 1.0},
+    "depth_noise": {"enabled": False, "sigma_rel": 0.02, "dropout": 0.01, "quant": 0.05},
 }
 _BUILTINS = ("oval", "kidney", "technical")
 

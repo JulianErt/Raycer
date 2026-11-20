@@ -40,6 +40,7 @@ class RaycerEnv(gym.Env[Obs, Any]):
         reward: dict[str, float] | None = None,
         metric_depth_info: bool = False,
         num_tracks: int | None = None,
+        depth_noise: bool | None = None,
     ) -> None:
         """Merge the config, configure and init the Game and build the spaces."""
         if render_mode not in (None, "rgb_array", "human"):
@@ -58,6 +59,8 @@ class RaycerEnv(gym.Env[Obs, Any]):
             overrides["max_episode_steps"] = max_episode_steps
         if num_tracks is not None:
             overrides["track"] = {"num_tracks": num_tracks}
+        if depth_noise is not None:
+            overrides["depth_noise"] = {"enabled": depth_noise}
         cfg = load_config(scenario, config_path, overrides)
         buffers = cfg["buffers"]
         if metric_depth_info and not buffers["depth"]:
@@ -82,6 +85,7 @@ class RaycerEnv(gym.Env[Obs, Any]):
         if reward is not None:
             self.game.set_reward_config(**reward)
         self.game.set_appearance(**cfg["appearance"])
+        self.game.set_depth_noise(**cfg["depth_noise"])
         self.game.init()
         if self._track_cfg["type"] == "builtin":
             self.game._set_track(load_builtin(self._track_cfg["builtin"]), self._laps)
