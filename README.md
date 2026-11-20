@@ -9,9 +9,18 @@ and semantic-label buffers.
 ## Installation
 
 ```bash
-uv add raycer
-uv add "raycer[human]"   # optional: pygame viewer for `raycer play` and render_mode="human"
+pip install "raycer @ git+https://github.com/JulianErt/Raycer"
+pip install "raycer[human] @ git+https://github.com/JulianErt/Raycer"   # optional: pygame viewer
 ```
+
+With uv:
+
+```bash
+uv add "raycer @ git+https://github.com/JulianErt/Raycer"
+uv add "raycer[human] @ git+https://github.com/JulianErt/Raycer"   # optional: pygame viewer
+```
+
+The `human` extra is needed only for `raycer play` and `render_mode="human"`.
 
 Raycer needs Python 3.12 or newer. The only runtime dependencies are numpy and gymnasium; pygame
 is pulled in only by the `human` extra.

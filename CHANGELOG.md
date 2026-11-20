@@ -6,12 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-20
+
 ### Added
 
 - `num_tracks` (`[track] num_tracks` and `RaycerEnv(num_tracks=N)`) limits procedural
   scenarios to the first N track seeds of their split.
 - Optional noisy depth sensor: the `[depth_noise]` table, `Game.set_depth_noise` and
   `RaycerEnv(depth_noise=True)`; only the depth outputs change.
+- Test that vector envs work with the `spawn` start method (`AsyncVectorEnv`, SB3 `SubprocVecEnv`).
 
 ## [0.2.0] - 2026-11-20
 
