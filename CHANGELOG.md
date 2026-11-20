@@ -10,6 +10,9 @@ All notable changes to this project are documented in this file. The format is b
 
 - `Game.get_pose()` returns the car pose `(x, y, heading)`; it is also in `info["pose"]` and
   recorded by `RecordEpisode` as the `pose` array (API-25).
+- `plot` extra (matplotlib) with `raycer.trajectory.plot_trajectories` (PNG/PDF) and
+  `animate_trajectories` (GIF) for car trajectories (API-26), and the example
+  `examples/trajectories.py` that plots PPO checkpoints on a ProcTest track (API-27).
 
 ## [0.3.0] - 2026-11-20
 

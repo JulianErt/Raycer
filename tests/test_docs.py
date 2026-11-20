@@ -17,7 +17,15 @@ from raycer.cli import main
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 DOCS = ROOT / "docs"
-DOC_PAGES = ["api", "scenarios", "observations", "recording", "reproducibility", "benchmark"]
+DOC_PAGES = [
+    "api",
+    "scenarios",
+    "observations",
+    "recording",
+    "reproducibility",
+    "benchmark",
+    "trajectories",
+]
 HEADINGS = [
     "Installation",
     "Quickstart",
@@ -136,6 +144,12 @@ def test_buffers_image_DOC01() -> None:
     assert len(data) <= 102_400
 
 
+def test_trajectories_gif_API26() -> None:
+    data = (DOCS / "img" / "trajectories.gif").read_bytes()
+    assert data.startswith(b"GIF89a")
+    assert len(data) <= 1_048_576
+
+
 def test_docs_pages_DOC02() -> None:
     for page in DOC_PAGES:
         assert (DOCS / f"{page}.md").read_text(encoding="utf-8").startswith("# ")
@@ -182,3 +196,7 @@ def test_version_and_extras_PKG04() -> None:
     assert pygame_reqs
     for req in pygame_reqs:
         assert re.search(r"""extra\s*==\s*["']human["']""", req), req
+    plot_reqs = [r for r in importlib.metadata.requires("raycer") or [] if "matplotlib" in r]
+    assert plot_reqs
+    for req in plot_reqs:
+        assert re.search(r"""extra\s*==\s*["']plot["']""", req), req
