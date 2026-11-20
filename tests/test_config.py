@@ -159,6 +159,32 @@ def test_invalid_track_via_user_toml(tmp_path: Path) -> None:
         load_config("proc-test-v0", _write(tmp_path, '[track]\nsplit = "nope"\n'))
 
 
+@pytest.mark.parametrize(
+    ("scenario", "value"),
+    [
+        ("oval-v0", 1),
+        ("proc-train-v0", 0),
+        ("proc-train-v0", True),
+        ("proc-train-v0", 2.0),
+        ("proc-test-v0", 10_001),
+    ],
+)
+def test_invalid_num_tracks_API23(scenario: str, value: object) -> None:
+    with pytest.raises(ValueError, match="num_tracks"):
+        load_config(scenario, overrides={"track": {"num_tracks": value}})
+
+
+def test_num_tracks_API23(tmp_path: Path) -> None:
+    path = _write(tmp_path, "[track]\nnum_tracks = 3\n")
+    assert load_config("proc-train-v0", path)["track"]["num_tracks"] == 3
+    overrides = {"track": {"num_tracks": 7}}
+    assert load_config("proc-train-v0", path, overrides)["track"]["num_tracks"] == 7
+    assert load_config("proc-test-v0", overrides={"track": {"num_tracks": 10_000}})
+    assert "num_tracks" not in load_config("proc-train-v0")["track"]
+    with pytest.raises(ValueError, match="num_tracks"):
+        load_config("oval-v0", path)
+
+
 def test_wheel_contains_scenarios(tmp_path: Path) -> None:
     root = Path(__file__).resolve().parents[1]
     subprocess.run(

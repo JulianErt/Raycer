@@ -39,6 +39,7 @@ class RaycerEnv(gym.Env[Obs, Any]):
         max_episode_steps: int | None = None,
         reward: dict[str, float] | None = None,
         metric_depth_info: bool = False,
+        num_tracks: int | None = None,
     ) -> None:
         """Merge the config, configure and init the Game and build the spaces."""
         if render_mode not in (None, "rgb_array", "human"):
@@ -55,6 +56,8 @@ class RaycerEnv(gym.Env[Obs, Any]):
         }
         if max_episode_steps is not None:
             overrides["max_episode_steps"] = max_episode_steps
+        if num_tracks is not None:
+            overrides["track"] = {"num_tracks": num_tracks}
         cfg = load_config(scenario, config_path, overrides)
         buffers = cfg["buffers"]
         if metric_depth_info and not buffers["depth"]:
@@ -117,7 +120,16 @@ class RaycerEnv(gym.Env[Obs, Any]):
         track_seed = (options or {}).get("track_seed")
         if self._track_cfg["type"] == "procedural":
             split = SPLITS[self._track_cfg["split"]]
-            if track_seed is None:
+            num_tracks = self._track_cfg.get("num_tracks")
+            if num_tracks is not None:
+                first = range(split.start, split.start + num_tracks)
+                if track_seed is None:
+                    track_seed = int(self.np_random.integers(first.start, first.stop))
+                elif int(track_seed) not in first:
+                    raise ValueError(
+                        f"track_seed {track_seed} not in the first num_tracks={num_tracks} seeds"
+                    )
+            elif track_seed is None:
                 track_seed = int(self.np_random.integers(split.start, split.stop))
             elif int(track_seed) not in split:
                 split_name = self._track_cfg["split"]

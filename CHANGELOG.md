@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `num_tracks` (`[track] num_tracks` and `RaycerEnv(num_tracks=N)`) limits procedural
+  scenarios to the first N track seeds of their split.
+
 ## [0.2.0] - 2026-11-20
 
 ### Added

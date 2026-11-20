@@ -7,6 +7,7 @@ import pickle
 import subprocess
 import sys
 import warnings
+from pathlib import Path
 from typing import Any
 
 import gymnasium
@@ -58,6 +59,7 @@ def test_signature_API03() -> None:
         ("max_episode_steps", kw, None),
         ("reward", kw, None),
         ("metric_depth_info", kw, False),
+        ("num_tracks", kw, None),
     ]
     assert [(p.name, p.kind, p.default) for p in params] == expected
     assert RaycerEnv.metadata == {"render_modes": ["rgb_array", "human"], "render_fps": 30}
@@ -243,6 +245,38 @@ def test_track_seed_API14() -> None:
     with pytest.raises(ValueError, match="track_seed"):
         _env().reset(options={"track_seed": 1})
     assert _env().reset()[1]["track_seed"] is None
+
+
+def _track_seeds(env: RaycerEnv, n: int) -> set[int]:
+    env.reset(seed=0)
+    return {env.reset()[1]["track_seed"] for _ in range(n)}
+
+
+def test_num_tracks_API23(tmp_path: Path) -> None:
+    start = SPLITS["train"].start
+    assert _track_seeds(_env(scenario="proc-train-v0", num_tracks=5), 500) == set(
+        range(start, start + 5)
+    )
+    user = tmp_path / "user.toml"
+    user.write_text("[track]\nnum_tracks = 3\n", encoding="utf-8")
+    from_toml = _env(scenario="proc-train-v0", config_path=str(user))
+    assert _track_seeds(from_toml, 200) == set(range(start, start + 3))
+    both = _env(scenario="proc-train-v0", config_path=str(user), num_tracks=2)
+    assert _track_seeds(both, 200) == set(range(start, start + 2))
+    env = _env(scenario="proc-train-v0", num_tracks=5)
+    assert env.reset(options={"track_seed": start + 4})[1]["track_seed"] == start + 4
+    with pytest.raises(ValueError, match=r"track_seed.*num_tracks"):
+        env.reset(options={"track_seed": start + 5})
+    test_len = len(SPLITS["test"])
+    _env(scenario="proc-test-v0", num_tracks=test_len)
+    with pytest.raises(ValueError, match="num_tracks"):
+        _env(scenario="proc-test-v0", num_tracks=test_len + 1)
+    with pytest.raises(ValueError, match="num_tracks"):
+        _env(scenario="proc-train-v0", num_tracks=0)
+    with pytest.raises(ValueError, match="num_tracks"):
+        _env(scenario="oval-v0", num_tracks=1)
+    with pytest.raises(ValueError, match="num_tracks"):
+        _env(scenario="oval-v0", config_path=str(user))
 
 
 def test_render_API15() -> None:

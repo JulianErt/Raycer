@@ -17,6 +17,8 @@ type = "builtin"              # "builtin" or "procedural"
 builtin = "oval"              # builtin only: oval, kidney or technical
 preset = "medium"             # procedural only: easy, medium or hard
 split = "train"               # procedural only: train, val or test
+num_tracks = 100              # procedural only, optional: use only the first N seeds of the
+                              # split (1 to split length); default is the whole split
 
 [screen]
 width = 96

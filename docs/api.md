@@ -51,7 +51,7 @@ A frozen dataclass with copies of the buffers:
 RaycerEnv(scenario="oval-v0", *, config_path=None, render_mode=None,
           action_type="discrete", screen=True, depth=False, labels=False,
           width=96, height=72, frame_skip=4, max_episode_steps=None,
-          reward=None, metric_depth_info=False)
+          reward=None, metric_depth_info=False, num_tracks=None)
 ```
 
 - `scenario` is any name from `raycer.list_scenarios()`, including procedural ones.
@@ -61,6 +61,8 @@ RaycerEnv(scenario="oval-v0", *, config_path=None, render_mode=None,
 - `action_type` is `"discrete"` (`Discrete(9)`) or `"continuous"` (`Box([-1, -1], [1, 1])`).
 - `reward` overrides weights by their `w_` names.
 - `metric_depth_info=True` adds the metric depth as `info["depth_m"]`; it needs `depth=True`.
+- `num_tracks=N` limits a procedural scenario to the first N track seeds of its split (like
+  Procgen's `num_levels`); it overrides `[track] num_tracks` and is invalid for builtin tracks.
 - `reset(seed=..., options={"track_seed": k})` pins the track of a procedural scenario.
 - `env.game` is the underlying `Game`.
 

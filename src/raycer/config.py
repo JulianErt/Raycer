@@ -17,7 +17,7 @@ _SCHEMA: dict[str, Any] = {
     "version": None,
     "laps": 1,
     "max_episode_steps": 3000,
-    "track": {"type": None, "builtin": None, "preset": None, "split": None},
+    "track": {"type": None, "builtin": None, "preset": None, "split": None, "num_tracks": None},
     "screen": {"width": 96, "height": 72},
     "buffers": {"screen": True, "depth": False, "labels": False},
     "physics": {"frame_skip": 4},
@@ -77,11 +77,17 @@ def _validate_track(track: Mapping[str, Any]) -> None:
     if kind == "builtin":
         if track.get("builtin") not in _BUILTINS:
             raise ValueError(f"track.builtin must be one of {list(_BUILTINS)}")
+        if "num_tracks" in track:
+            raise ValueError("track.num_tracks is only allowed for procedural tracks")
     elif kind == "procedural":
         if track.get("preset") not in PRESETS:
             raise ValueError(f"track.preset must be one of {list(PRESETS)}")
         if track.get("split") not in SPLITS:
             raise ValueError(f"track.split must be one of {list(SPLITS)}")
+        n = track.get("num_tracks", 1)
+        size = len(SPLITS[track["split"]])
+        if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= size:
+            raise ValueError(f"track.num_tracks must be an int from 1 to {size}, got {n!r}")
     else:
         raise ValueError(f"track.type must be 'builtin' or 'procedural', got {kind!r}")
 
